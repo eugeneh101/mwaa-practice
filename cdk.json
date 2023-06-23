@@ -1,0 +1,12 @@
+{
+  "app": "python3 app.py",
+  "context": {
+      "environment": {
+          "AWS_REGION": "us-east-1",
+          "S3_BUCKET_NAME": "mwaa-bucket-practice",
+          "MWAA_CLUSTER_NAME": "mwaa-cluster-practice",
+          "DAGS_FOLDER": "dags",
+          "CLOUDFORMATION_BUCKET": "..."
+      }
+  }
+}
