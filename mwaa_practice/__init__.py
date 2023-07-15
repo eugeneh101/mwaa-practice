@@ -5,10 +5,47 @@ from aws_cdk import (
     aws_ec2 as ec2,
     aws_iam as iam,
     aws_mwaa as mwaa,
+    aws_redshift as redshift,
     aws_s3 as s3,
     aws_s3_deployment as s3_deploy,
 )
 from constructs import Construct
+
+
+class RedshiftService(Construct):
+    def __init__(
+        self,
+        scope: Construct,
+        construct_id: str,
+        vpc: ec2.Vpc,
+        security_group: ec2.SecurityGroup,
+    ) -> None:
+        super().__init__(scope, construct_id)  # required
+        redshift_cluster_subnet_group = redshift.CfnClusterSubnetGroup(
+            self,
+            "RedshiftClusterSubnetGroup",
+            subnet_ids=vpc.select_subnets(  # Redshift can exist within only 1 AZs, though no longer true for RA3 nodes
+                subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS
+            ).subnet_ids
+            # need at least 1 public subnet to be publicly accessible
+            + vpc.select_subnets(subnet_type=ec2.SubnetType.PUBLIC).subnet_ids,
+            description="Redshift Cluster Subnet Group",
+        )
+        self.redshift_cluster = redshift.CfnCluster(
+            self,
+            "RedshiftCluster",
+            cluster_type="single-node",  # for demo purposes
+            number_of_nodes=1,  # for demo purposes
+            node_type="ra3.xlplus",  # for demo purposes
+            cluster_identifier="mwaa-practice-redshift-cluster",  # hard coded
+            db_name="dev",  # hard coded
+            master_username="admin",  # hard coded
+            master_user_password="Password1",  # hard coded
+            # iam_roles=[self.redshift_full_commands_full_access_role.role_arn],
+            cluster_subnet_group_name=redshift_cluster_subnet_group.ref,  # needed or will use default VPC
+            vpc_security_group_ids=[security_group.security_group_id],
+            publicly_accessible=True,  # hard coded
+        )
 
 
 class MwaaPracticeStack(Stack):
@@ -25,8 +62,8 @@ class MwaaPracticeStack(Stack):
         ]
         self.vpc = ec2.Vpc(
             self,
-            "PrivateVPC",
-            vpc_name="mwaa-private-vpc",  # hard coded
+            "MwaaVpc",
+            vpc_name="mwaa-vpc",  # hard coded
             max_azs=2,  # MWAA needs 2 private subnets in different AZs
             nat_gateways=1,
             subnet_configuration=[
@@ -96,12 +133,24 @@ class MwaaPracticeStack(Stack):
             inline_policies={"LambdaPolicyDocument": lambda_policy_document},
         )
         # upload local dags
-        s3_deploy.BucketDeployment(
+        airflow_dags = s3_deploy.BucketDeployment(
             self,
             "DeployDAG",
             destination_bucket=self.dags_bucket,
             destination_key_prefix=environment["DAGS_FOLDER"],
             sources=[s3_deploy.Source.asset("./dags")],  # hard coded
+            prune=True,  ### it seems that delete Lambda uses a different IAM role
+            retain_on_delete=False,
+            role=s3_upload_delete_role,
+            # vpc=...,
+            # vpc_subnets=...,
+        )
+        airflow_requirements = s3_deploy.BucketDeployment(
+            self,
+            "DeployRequirements",
+            destination_bucket=self.dags_bucket,
+            destination_key_prefix=environment["REQUIREMENTS_FOLDER"],
+            sources=[s3_deploy.Source.asset("./requirements")],  # hard coded
             prune=True,  ### it seems that delete Lambda uses a different IAM role
             retain_on_delete=False,
             role=s3_upload_delete_role,
@@ -227,6 +276,7 @@ class MwaaPracticeStack(Stack):
             ),
             inline_policies={"CDKmwaaPolicyDocument": mwaa_policy_document},
             path="/service-role/",
+            role_name=environment["MWAA_ROLE_NAME"],
         )
 
         network_configuration = mwaa.CfnEnvironment.NetworkConfigurationProperty(
@@ -255,29 +305,45 @@ class MwaaPracticeStack(Stack):
             scope=self,
             id="MwaaCluster",
             name=environment["MWAA_CLUSTER_NAME"],
-            airflow_configuration_options={
+            airflow_configuration_options={  # might put in cdk.json
                 "core.default_timezone": "utc",  # "AIRFLOW__CORE__DEFAULT_TIMEZONE"
                 "core.parallelism": "32",  # "AIRFLOW__CORE__PARALLELISM": maximum number of task instances that can run simultaneously across the entire environment in parallel, regardless of the worker count
                 "core.max_active_tasks_per_dag": "16",  # AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG: number of task instances allowed to run concurrently in each DAG
                 "celery.worker_autoscale": "7,0",  # AIRFLOW__CELERY__WORKER_AUTOSCALE":  maximum and minimum number of tasks that can run concurrently on any worker. If autoscale option is available, worker_concurrency will be ignored.
                 # "core.worker_concurrency": "15",  # "AIRFLOW__CELERY__WORKER_CONCURRENCY": number of task instances that a worker will take
+                "webserver.web_server_master_timeout": "100",
             },
             dag_s3_path=environment["DAGS_FOLDER"],
-            environment_class="mw1.small",
+            requirements_s3_path=f"{environment['REQUIREMENTS_FOLDER']}/requirements.txt",
+            # requirements_s3_object_version="qsJG183qIaelBkpLVBiR09stNBMkVILu",  ### hard coded after you look in S3 console
+            environment_class=environment["MWAA_SIZE"],
+            max_workers=2,  ### change later
             execution_role_arn=self.mwaa_service_role.role_arn,
             logging_configuration=logging_configuration,
-            max_workers=2,  ### change later
             network_configuration=network_configuration,
             source_bucket_arn=self.dags_bucket.bucket_arn,
             webserver_access_mode="PUBLIC_ONLY",
-            # airflow_version="2.5.1",
+            airflow_version="2.5.1",
             # plugins_s3_object_version=None,
             # plugins_s3_path=None,
-            # requirements_s3_object_version=None,
-            # requirements_s3_path=None,
             # weekly_maintenance_window_start=None,
             # kms_key=key.key_arn,
         )
+
+        if environment["TURN_ON_REDSHIFT_CLUSTER"]:
+            self.security_group.add_ingress_rule(
+                peer=ec2.Peer.any_ipv4(),
+                connection=ec2.Port.tcp(5439),
+            )
+            self.redshift_service = RedshiftService(
+                self,  # still need to manual load sample data
+                "RedshiftService",
+                vpc=self.vpc,
+                security_group=self.security_group,
+            )
+
+        # connect AWS resources together
+        self.mwaa_cluster.node.add_dependency(airflow_requirements)
 
         # write Cloudformation Outputs
         CfnOutput(

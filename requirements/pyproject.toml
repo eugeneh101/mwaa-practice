@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "requirements"
+version = "0.1.0"
+description = ""
+authors = ["Your Name <you@example.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.9"
+# black = "^23.7.0"
+dbt-core = "1.4.5"  # could not get 1.5.2 working
+dbt-redshift = "1.4.0"  # could not get 1.5.7 working
+# fastapi = "^0.100.0"
+# pandas = "^2.0.3"
+# tqdm = "^4.65.0"
+apache-airflow-providers-docker = "^3.7.1"
+
+[tool.poetry.group.dev.dependencies]
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

@@ -1,0 +1,48 @@
+version: 2
+
+sources:
+  - name: tickit  # schema
+    description: blah
+    tables:
+      - name: category
+        description: blah
+        columns:
+          - name: catid
+            description: blah
+            tests:
+              - unique
+              - not_null
+          - name: catgroup
+            description: "blah"
+            tests:
+              - unique  # should fail
+              - not_null
+          - name: catname
+            description: "blah"
+            tests:
+              - unique
+              - not_null
+          - name: catdesc
+            description: "blah"
+            tests:
+              - unique
+              - not_null
+
+# models:
+#   - name: my_first_dbt_model
+#     description: "A starter dbt model"
+#     columns:
+#       - name: id
+#         description: "The primary key for this table"
+#         tests:
+#           - unique
+#           # - not_null # should fail
+
+#   - name: my_second_dbt_model
+#     description: "A starter dbt model"
+#     columns:
+#       - name: id
+#         description: "The primary key for this table"
+#         tests:
+#           - unique
+#           - not_null

@@ -3,10 +3,14 @@
   "context": {
       "environment": {
           "AWS_REGION": "us-east-1",
-          "S3_BUCKET_NAME": "mwaa-bucket-practice",
-          "MWAA_CLUSTER_NAME": "mwaa-cluster-practice",
+          "S3_BUCKET_NAME": "mwaa-practice-bucket",
+          "MWAA_CLUSTER_NAME": "mwaa-practice-cluster",
+          "MWAA_SIZE": "mw1.small",
+          "MWAA_ROLE_NAME": "mwaa-practice-role",
           "DAGS_FOLDER": "dags",
-          "CLOUDFORMATION_BUCKET": "..."
+          "REQUIREMENTS_FOLDER": "requirements",
+          "CLOUDFORMATION_BUCKET": "...",
+          "TURN_ON_REDSHIFT_CLUSTER": true
       }
   }
 }

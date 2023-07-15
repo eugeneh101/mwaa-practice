@@ -27,13 +27,13 @@ def get_data():
 
 
 dag = DAG(
-    "data-dag",
-    description="Hello world example",
+    "massively-paralel-dag",
+    description="Massive fanout",
     schedule_interval=None,
     # schedule_interval="*/10 * * * *",
     start_date=datetime(2017, 3, 20),
     catchup=False,
-    is_paused_upon_creation=True,
+    is_paused_upon_creation=False,
     tags=["eugene"],
     concurrency=14,  # bound by celery.worker_autoscale * max_workers
 )
@@ -45,23 +45,21 @@ list_python_packages_operator = BashOperator(
     task_id="list_python_packages", bash_command="python3 -m pip list"
 )
 # task_accumulator >> list_python_packages_operator
-dummy_operator >> list_python_packages_operator
 
 get_env_vars_operator = PythonOperator(
     task_id="get_env_vars_task", python_callable=print_env_vars
 )
 # task_accumulator >> get_env_vars_operator
-dummy_operator >> get_env_vars_operator
+
 
 get_airflow_cfg_operator = PythonOperator(
     task_id="get_airflow_cfg_task", python_callable=print_airflow_cfg
 )
 # task_accumulator >> get_airflow_cfg_operator
-dummy_operator >> get_airflow_cfg_operator
 
 for i in range(30):
     data_operator = PythonOperator(
         task_id=f"hello_task_{i}", python_callable=get_data, dag=dag
     )
     # task_accumulator = task_accumulator >> data_operator
-    dummy_operator >> data_operator
+    [dummy_operator, list_python_packages_operator, get_env_vars_operator, get_airflow_cfg_operator] >> data_operator

@@ -1,0 +1,14 @@
+dbt_practice:
+  target: sample_data_dev  # remember to manually load data
+  outputs:
+    sample_data_dev:
+      type: redshift
+      threads: 2
+      host: ...  # figure this out
+      port: 5439
+      user: ...
+      pass: ...
+      dbname: sample_data_dev
+      schema: tickit  # remember to manually load data
+config:
+  send_anonymous_usage_stats: False
