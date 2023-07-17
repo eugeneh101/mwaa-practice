@@ -129,11 +129,16 @@ class MwaaPracticeStack(Stack):
         s3_upload_delete_role = iam.Role(
             self,
             "S3UploadDeleteRole",
+            role_name="s3-upload-delete-role",  # hard coded
             assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
+            managed_policies=[
+                iam.ManagedPolicy.from_aws_managed_policy_name(
+                    "service-role/AWSLambdaBasicExecutionRole"
+                )
+            ],
             inline_policies={"LambdaPolicyDocument": lambda_policy_document},
         )
-        # upload local dags
-        airflow_dags = s3_deploy.BucketDeployment(
+        airflow_dags = s3_deploy.BucketDeployment(  # upload dags to S3
             self,
             "DeployDAG",
             destination_bucket=self.dags_bucket,
@@ -145,12 +150,14 @@ class MwaaPracticeStack(Stack):
             # vpc=...,
             # vpc_subnets=...,
         )
-        airflow_requirements = s3_deploy.BucketDeployment(
+        airflow_requirements = s3_deploy.BucketDeployment(  # upload requirements to S3
             self,
             "DeployRequirements",
             destination_bucket=self.dags_bucket,
             destination_key_prefix=environment["REQUIREMENTS_FOLDER"],
-            sources=[s3_deploy.Source.asset("./requirements")],  # hard coded
+            sources=[
+                s3_deploy.Source.asset("./requirements", exclude=[".venv/*"])
+            ],  # hard coded
             prune=True,  ### it seems that delete Lambda uses a different IAM role
             retain_on_delete=False,
             role=s3_upload_delete_role,
