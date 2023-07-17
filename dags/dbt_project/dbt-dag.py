@@ -14,23 +14,24 @@ dag = DAG(
     is_paused_upon_creation=False,
 )
 
-def current_env(**kwargs):
+def current_location(**kwargs):
     import pathlib
-    print(pathlib.Path(__file__).parent.resolve())
+    print("kwargs: ", kwargs)
+    print("file is in: ", pathlib.Path(__file__).parent.resolve())
 
 
 python_op = PythonOperator(
     task_id="print_the_context",
     provide_context=True,
-    python_callable=current_env,
-    # op_kwargs={"name": "Data Rocks"},
+    python_callable=current_location,
+    op_kwargs={"name": "Data Rocks"},
     dag=dag,
 )
 
 bash_op0 = BashOperator(task_id="dbt0", bash_command="pwd", dag=dag)
 bash_op1 = BashOperator(task_id="dbt1", bash_command="dbt --version", dag=dag)
 bash_op2 = BashOperator(
-    task_id="dbt2",
+    task_id="dbt2",  # task fails because does not have permissions to run git
     bash_command="cp -R /usr/local/airflow/dags/dbt_project /tmp && cd /tmp/dbt_project && dbt debug",
 #     bash_command="cd /usr/local/airflow/dags/dbt_project  && DBT_LOG_PATH=/usr/local/airflow/tmp/logs && dbt debug",
 # #     --log-path /usr/local/airflow/tmp/logs
@@ -38,7 +39,16 @@ bash_op2 = BashOperator(
 )
 bash_op3 = BashOperator(
     task_id="dbt3",
-    bash_command="cp -R /usr/local/airflow/dags/dbt_project /tmp && cd /tmp/dbt_project && dbt run",
+    # bash_command="cp -R /usr/local/airflow/dags/dbt_project /tmp && cd /tmp/dbt_project && dbt run",
+    bash_command=" && ".join([
+        "cd /usr/local/airflow/dags/dbt_project",
+        ### seems like only dbt_project configurations work
+        # "DBT_TARGET_DIR=/tmp/dbt/target",
+        # "DBT_LOG_DIR=/tmp/dbt/logs",
+        # "DBT_LOG_PATH=/tmp/dbt/logs",
+        # "DBT_PACKAGE_DIR=/tmp/dbt/dbt_packages",
+        "dbt run",
+    ]),
     dag=dag,
 )
 bash_op4 = BashOperator(
