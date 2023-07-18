@@ -8,8 +8,8 @@ readme = "README.md"
 [tool.poetry.dependencies]
 python = "^3.9"
 # black = "^23.7.0"
-dbt-core = "1.4.5"  # could not get 1.5.2 working
-dbt-redshift = "1.4.0"  # could not get 1.5.7 working
+dbt-core = "1.5.3"
+dbt-redshift = "1.5.8"
 # fastapi = "^0.100.0"
 # pandas = "^2.0.3"
 # tqdm = "^4.65.0"

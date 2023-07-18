@@ -16,9 +16,10 @@ model-paths: ["models"]
 test-paths: ["tests"]
 
 # needed to run dbt in MWAA since MWAA workers don't allow writing to most folders
-target-path: "/tmp/dbt/target"
-log-path: "/tmp/dbt/logs"
-packages-install-path: "/tmp/dbt/dbt_packages"
+# OR `cp -R /usr/local/airflow/dags/dbt_project /tmp && cd /tmp/dbt_project && dbt SOME_COMMAND`
+# target-path: "/tmp/dbt/target"
+# log-path: "/tmp/dbt/logs"
+# packages-install-path: "/tmp/dbt/dbt_packages"
 
 clean-targets: # directories to be removed by `dbt clean`
   - "target"

@@ -4,6 +4,12 @@ from airflow import DAG
 from airflow.operators.bash_operator import BashOperator
 from airflow.operators.python_operator import PythonOperator
 
+# Needed since MWAA workers only allow you to write to specific directories
+# and DBT writes to target/, logs/, and dbt_packages/ folders.
+# Based on guide in https://docs.aws.amazon.com/mwaa/latest/userguide/samples-dbt.html
+MWAA_DBT_PREFIX_COMMAND = (
+    "cp -R /usr/local/airflow/dags/dbt_project /tmp && cd /tmp/dbt_project"
+)
 
 dag = DAG(
     "dbt-dag",
@@ -14,8 +20,10 @@ dag = DAG(
     is_paused_upon_creation=False,
 )
 
+
 def current_location(**kwargs):
     import pathlib
+
     print("kwargs: ", kwargs)
     print("file is in: ", pathlib.Path(__file__).parent.resolve())
 
@@ -32,28 +40,23 @@ bash_op0 = BashOperator(task_id="dbt0", bash_command="pwd", dag=dag)
 bash_op1 = BashOperator(task_id="dbt1", bash_command="dbt --version", dag=dag)
 bash_op2 = BashOperator(
     task_id="dbt2",  # task fails because does not have permissions to run git
-    bash_command="cp -R /usr/local/airflow/dags/dbt_project /tmp && cd /tmp/dbt_project && dbt debug",
-#     bash_command="cd /usr/local/airflow/dags/dbt_project  && DBT_LOG_PATH=/usr/local/airflow/tmp/logs && dbt debug",
-# #     --log-path /usr/local/airflow/tmp/logs
+    bash_command=f"{MWAA_DBT_PREFIX_COMMAND} && dbt debug",  # --log-path CLI doesn't seem to work
     dag=dag,
 )
 bash_op3 = BashOperator(
-    task_id="dbt3",
-    # bash_command="cp -R /usr/local/airflow/dags/dbt_project /tmp && cd /tmp/dbt_project && dbt run",
-    bash_command=" && ".join([
-        "cd /usr/local/airflow/dags/dbt_project",
-        ### seems like only dbt_project configurations work
-        # "DBT_TARGET_DIR=/tmp/dbt/target",
-        # "DBT_LOG_DIR=/tmp/dbt/logs",
-        # "DBT_LOG_PATH=/tmp/dbt/logs",
-        # "DBT_PACKAGE_DIR=/tmp/dbt/dbt_packages",
-        "dbt run",
-    ]),
+    task_id="dbt3",  ### have to manually click to create the Redshift database
+    bash_command=f"{MWAA_DBT_PREFIX_COMMAND} && dbt run",
+    # bash_command=" ".join([
+    #     "DBT_TARGET_PATH=/tmp/dbt/target",  # if don't use `target-path` in dbt_project.yml
+    #     "DBT_LOG_PATH=/tmp/dbt/logs",  # if don't use `log-path` in dbt_project.yml
+    #     # "DBT_PACKAGE_PATH=/tmp/dbt/dbt_packages",  # doesn't work, so need `packages-install-path` in dbt_project.yml
+    #     "sh -c 'cd /usr/local/airflow/dags/dbt_project && dbt run'",
+    # ]),
     dag=dag,
 )
 bash_op4 = BashOperator(
-    task_id="dbt4",
-    bash_command="cp -R /usr/local/airflow/dags/dbt_project /tmp && cd /tmp/dbt_project && dbt test",
+    task_id="dbt4",  ### have to manually click to create the Redshift database
+    bash_command=f"{MWAA_DBT_PREFIX_COMMAND} && dbt test",
     dag=dag,
 )
 

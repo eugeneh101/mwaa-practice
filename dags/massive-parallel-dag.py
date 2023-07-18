@@ -62,4 +62,9 @@ for i in range(30):
         task_id=f"hello_task_{i}", python_callable=get_data, dag=dag
     )
     # task_accumulator = task_accumulator >> data_operator
-    [dummy_operator, list_python_packages_operator, get_env_vars_operator, get_airflow_cfg_operator] >> data_operator
+    [
+        dummy_operator,
+        list_python_packages_operator,
+        get_env_vars_operator,
+        get_airflow_cfg_operator,
+    ] >> data_operator
