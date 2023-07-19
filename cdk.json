@@ -9,6 +9,7 @@
           "MWAA_ROLE_NAME": "mwaa-practice-role",
           "DAGS_FOLDER": "dags",
           "REQUIREMENTS_FOLDER": "requirements",
+          "REQUIREMENTS_VERSION": null,
           "CLOUDFORMATION_BUCKET": "...",
           "TURN_ON_REDSHIFT_CLUSTER": true
       }

@@ -27,7 +27,8 @@ class RedshiftService(Construct):
             subnet_ids=vpc.select_subnets(  # Redshift can exist within only 1 AZs, though no longer true for RA3 nodes
                 subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS
             ).subnet_ids
-            # need at least 1 public subnet to be publicly accessible
+            # need at least 1 public subnet to be publicly accessible though MWAA can still
+            # connect to Redshift if Redshift has only PRIVATE_WITH_EGRESS subnets
             + vpc.select_subnets(subnet_type=ec2.SubnetType.PUBLIC).subnet_ids,
             description="Redshift Cluster Subnet Group",
         )
@@ -322,7 +323,9 @@ class MwaaPracticeStack(Stack):
             },
             dag_s3_path=environment["DAGS_FOLDER"],
             requirements_s3_path=f"{environment['REQUIREMENTS_FOLDER']}/requirements.txt",
-            # requirements_s3_object_version="qsJG183qIaelBkpLVBiR09stNBMkVILu",  ### hard coded after you look in S3 console
+            requirements_s3_object_version=environment[
+                "REQUIREMENTS_VERSION"
+            ],  # look in S3 console for requirements.txt version
             environment_class=environment["MWAA_SIZE"],
             max_workers=2,  ### change later
             execution_role_arn=self.mwaa_service_role.role_arn,
