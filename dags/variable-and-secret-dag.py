@@ -8,20 +8,41 @@ from airflow.operators.python_operator import PythonOperator
 # Variables with the follow words in the key name will have the value automatically encrypted:
 # "access_token", "api_key", "apikey", "authorization", "keyfile_dict", "passphrase", "passwd", "password", "private_key", "secret", "service_account", "token"
 
+
+# put the following Variables into Airflow
+"""
+{
+    "json_key": {
+        "foo": "bar"
+    },
+    "variable_key": "variable_value",
+    "variable_private_key": "variable_private_value"
+}
+"""
+
+
 def get_variable(**kwargs):
     print("kwargs", kwargs)
     value1 = Variable.get("variable_key")  # hard coded but first create Variable
-    value2 = Variable.get("variable_private_key")  # hard coded but first create Variable
+    value2 = Variable.get(
+        "variable_private_key"
+    )  # hard coded but first create Variable
     print("value1", value1)
     from collections import Counter
+
     # `value2` is just "***" in logs, automatically suppressed in logs by value is still correct
     print("value2", value2, len(value2), value2[::-1], Counter(value2))
-    print("non-existent value", Variable.get("non-existent key", default_var="non-existent value"))
+    print(
+        "non-existent value",
+        Variable.get("non-existent key", default_var="non-existent value"),
+    )
 
 
 def get_json_variable(**kwargs):
     value1 = Variable.get("json_key")  # hard coded but first create Variable
-    value2 = Variable.get("json_key", deserialize_json=True)  # hard coded but first create Variable
+    value2 = Variable.get(
+        "json_key", deserialize_json=True
+    )  # hard coded but first create Variable
     print("value1", value1, type(value1))
     print("value2", value2, type(value2))
 
@@ -59,13 +80,16 @@ echo_json_var = BashOperator(
     bash_command='echo "my value is: {{ var.value.json_key }}"',  # hard coded but first create Variable
 )
 
-get_var_task = PythonOperator(
-    task_id="get_var_task", python_callable=get_variable
-)
+get_var_task = PythonOperator(task_id="get_var_task", python_callable=get_variable)
 get_json_var_task = PythonOperator(
     task_id="get_json_var_task", python_callable=get_json_variable
 )
-set_var_task = PythonOperator(
-   task_id="set_var_task", python_callable=set_variable
+set_var_task = PythonOperator(task_id="set_var_task", python_callable=set_variable)
+(
+    echo_var
+    >> echo_json_var
+    >> echo_json_var_jsonified
+    >> get_var_task
+    >> get_json_var_task
+    >> set_var_task
 )
-echo_var >> echo_json_var >> echo_json_var_jsonified >> get_var_task >> get_json_var_task >> set_var_task
