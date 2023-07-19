@@ -7,13 +7,20 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.9"
-# black = "^23.7.0"
+apache-airflow = "2.5.1"  # pin Airflow version to match MWAA version, or it will override MWAA's Airflow version
+# apache-airflow-providers-docker = "^3.7.1"  # don't need for now
 dbt-core = "1.5.3"
 dbt-redshift = "1.5.8"
+# It appears that MWAA 2.5.1 uses poetry 1.4.0 during installing updated requirements.txt
+# If MWAA fails to update (ie rollback), then look at MWAA scheduler's logs.
+# If the problem is elsewhere, feel free to delete `poetry = "1.4.0"` dependency
+poetry = "1.4.0"
+
+# fun libraries that are not needed
+# black = "^23.7.0"
 # fastapi = "^0.100.0"
 # pandas = "^2.0.3"
 # tqdm = "^4.65.0"
-apache-airflow-providers-docker = "^3.7.1"
 
 [tool.poetry.group.dev.dependencies]
 
