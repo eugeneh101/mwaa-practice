@@ -6,8 +6,10 @@ from airflow.operators.bash import BashOperator
 from airflow.operators.python_operator import PythonOperator
 
 # Variables with the follow words in the key name will have the value automatically encrypted:
-# "access_token", "api_key", "apikey", "authorization", "keyfile_dict", "passphrase", "passwd", "password", "private_key", "secret", "service_account", "token"
-
+# "access_token", "api_key", "apikey", "authorization", "keyfile_dict",
+# "passphrase", "passwd", "password", "private_key", "secret", "service_account", "token".
+# Any strings that match an encrypted secret will appear as "***" in the logs,
+# but the value is still correct.
 
 # put the following Variables into Airflow
 """
