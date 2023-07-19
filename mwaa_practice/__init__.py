@@ -325,7 +325,9 @@ class MwaaPracticeStack(Stack):
             requirements_s3_path=f"{environment['REQUIREMENTS_FOLDER']}/requirements.txt",
             requirements_s3_object_version=environment[
                 "REQUIREMENTS_VERSION"
-            ],  # look in S3 console for requirements.txt version
+            ]  # look in S3 console for requirements.txt version
+            if environment["REQUIREMENTS_VERSION"]
+            else None,  # cdk.json can't seem to recognize null as a valid value, so use false instead
             environment_class=environment["MWAA_SIZE"],
             max_workers=2,  ### change later
             execution_role_arn=self.mwaa_service_role.role_arn,
