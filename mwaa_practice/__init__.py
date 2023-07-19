@@ -1,6 +1,9 @@
+import json
+
 from aws_cdk import (
     CfnOutput,
     RemovalPolicy,
+    SecretValue,
     Stack,
     aws_ec2 as ec2,
     aws_iam as iam,
@@ -8,6 +11,7 @@ from aws_cdk import (
     aws_redshift as redshift,
     aws_s3 as s3,
     aws_s3_deployment as s3_deploy,
+    aws_secretsmanager as secrets_manager,
 )
 from constructs import Construct
 
@@ -19,6 +23,7 @@ class RedshiftService(Construct):
         construct_id: str,
         vpc: ec2.Vpc,
         security_group: ec2.SecurityGroup,
+        environment: dict,
     ) -> None:
         super().__init__(scope, construct_id)  # required
         redshift_cluster_subnet_group = redshift.CfnClusterSubnetGroup(
@@ -38,10 +43,10 @@ class RedshiftService(Construct):
             cluster_type="single-node",  # for demo purposes
             number_of_nodes=1,  # for demo purposes
             node_type="ra3.xlplus",  # for demo purposes
-            cluster_identifier="mwaa-practice-redshift-cluster",  # hard coded
-            db_name="dev",  # hard coded
-            master_username="admin",  # hard coded
-            master_user_password="Password1",  # hard coded
+            cluster_identifier=environment["REDSHIFT_DETAILS"]["REDSHIFT_CLUSTER_NAME"],
+            db_name=environment["REDSHIFT_DETAILS"]["REDSHIFT_DATABASE_NAME"],
+            master_username=environment["REDSHIFT_DETAILS"]["REDSHIFT_USERNAME"],
+            master_user_password=environment["REDSHIFT_DETAILS"]["REDSHIFT_PASSWORD"],
             # iam_roles=[self.redshift_full_commands_full_access_role.role_arn],
             cluster_subnet_group_name=redshift_cluster_subnet_group.ref,  # needed or will use default VPC
             vpc_security_group_ids=[security_group.security_group_id],
@@ -251,6 +256,26 @@ class MwaaPracticeStack(Stack):
                         }
                     },
                 ),
+                # based on guidance from https://docs.aws.amazon.com/mwaa/latest/userguide/connections-secrets-manager.html
+                iam.PolicyStatement(
+                    actions=[
+                        "secretsmanager:GetResourcePolicy",
+                        "secretsmanager:GetSecretValue",
+                        "secretsmanager:DescribeSecret",
+                        "secretsmanager:ListSecretVersionIds",
+                    ],
+                    effect=iam.Effect.ALLOW,
+                    resources=[
+                        f"arn:aws:secretsmanager:{self.region}:{self.account}:secret:*"
+                    ],
+                ),
+                iam.PolicyStatement(
+                    actions=[
+                        "secretsmanager:ListSecrets",
+                    ],
+                    effect=iam.Effect.ALLOW,
+                    resources=["*"],
+                ),
                 # iam.PolicyStatement(
                 #     actions=[
                 #         "ecs:RunTask",
@@ -310,8 +335,8 @@ class MwaaPracticeStack(Stack):
         )
 
         self.mwaa_cluster = mwaa.CfnEnvironment(
-            scope=self,
-            id="MwaaCluster",
+            self,
+            "MwaaCluster",
             name=environment["MWAA_CLUSTER_NAME"],
             airflow_configuration_options={  # might put in cdk.json
                 "core.default_timezone": "utc",  # "AIRFLOW__CORE__DEFAULT_TIMEZONE"
@@ -320,6 +345,13 @@ class MwaaPracticeStack(Stack):
                 "celery.worker_autoscale": "7,0",  # AIRFLOW__CELERY__WORKER_AUTOSCALE":  maximum and minimum number of tasks that can run concurrently on any worker. If autoscale option is available, worker_concurrency will be ignored.
                 # "core.worker_concurrency": "15",  # "AIRFLOW__CELERY__WORKER_CONCURRENCY": number of task instances that a worker will take
                 "webserver.web_server_master_timeout": "100",
+                "secrets.backend": "airflow.providers.amazon.aws.secrets.secrets_manager.SecretsManagerBackend",  # needed for Secrets Manager
+                "secrets.backend_kwargs": json.dumps(  # needed for Secrets Manager
+                    {
+                        "connections_prefix": "airflow/connections",
+                        "variables_prefix": "airflow/variables",
+                    }
+                ),
             },
             dag_s3_path=environment["DAGS_FOLDER"],
             requirements_s3_path=f"{environment['REQUIREMENTS_FOLDER']}/requirements.txt",
@@ -342,7 +374,18 @@ class MwaaPracticeStack(Stack):
             # kms_key=key.key_arn,
         )
 
-        if environment["TURN_ON_REDSHIFT_CLUSTER"]:
+        redshift_password_secret = secrets_manager.Secret(
+            self,
+            "RedshiftSecret",
+            removal_policy=RemovalPolicy.DESTROY,
+            secret_name="airflow/variables/redshift-password",
+            secret_string_value=SecretValue.unsafe_plain_text(
+                secret=environment["REDSHIFT_DETAILS"]["REDSHIFT_PASSWORD"]
+            ),
+            # description=None,
+        )
+
+        if environment["REDSHIFT_DETAILS"]["TURN_ON_REDSHIFT_CLUSTER"]:
             self.security_group.add_ingress_rule(
                 peer=ec2.Peer.any_ipv4(),
                 connection=ec2.Port.tcp(5439),
@@ -352,6 +395,7 @@ class MwaaPracticeStack(Stack):
                 "RedshiftService",
                 vpc=self.vpc,
                 security_group=self.security_group,
+                environment=environment,
             )
 
         # connect AWS resources together

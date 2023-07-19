@@ -11,7 +11,13 @@
           "REQUIREMENTS_FOLDER": "requirements",
           "REQUIREMENTS_VERSION": false,
           "CLOUDFORMATION_BUCKET": "...",
-          "TURN_ON_REDSHIFT_CLUSTER": true
+          "REDSHIFT_DETAILS": {
+              "TURN_ON_REDSHIFT_CLUSTER": true,
+              "REDSHIFT_CLUSTER_NAME": "mwaa-practice-redshift-cluster",
+              "REDSHIFT_DATABASE_NAME": "dev",
+              "REDSHIFT_USERNAME": "admin",
+              "REDSHIFT_PASSWORD": "Password1"
+          }
       }
   }
 }

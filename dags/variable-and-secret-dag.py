@@ -87,6 +87,17 @@ get_json_var_task = PythonOperator(
     task_id="get_json_var_task", python_callable=get_json_variable
 )
 set_var_task = PythonOperator(task_id="set_var_task", python_callable=set_variable)
+
+get_redshift_secret = BashOperator(
+    task_id="get_redshift_password_from_secrets_manager",
+    bash_command="echo 'The value of the variable is: {var}'".format(
+        var=Variable.get(
+            "redshift-password",  # hard coded secret deployed by CDK
+            default_var="couldn't get the secret",
+        )
+    ),
+)
+
 (
     echo_var
     >> echo_json_var
@@ -94,4 +105,5 @@ set_var_task = PythonOperator(task_id="set_var_task", python_callable=set_variab
     >> get_var_task
     >> get_json_var_task
     >> set_var_task
+    >> get_redshift_secret
 )
