@@ -27,7 +27,7 @@ def get_data():
 
 
 dag = DAG(
-    "massively-paralel-dag",
+    "massively-parallel-dag",
     description="Massive fanout",
     schedule_interval=None,
     # schedule_interval="*/10 * * * *",
