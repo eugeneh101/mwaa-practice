@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from airflow import DAG
+from airflow.hooks.base_hook import BaseHook
 from airflow.operators.bash_operator import BashOperator
 from airflow.operators.python_operator import PythonOperator
 
@@ -11,6 +12,19 @@ MWAA_DBT_PREFIX_COMMAND = (
     "cp -R /usr/local/airflow/dags/dbt_project /tmp && cd /tmp/dbt_project"
 )
 
+
+def get_redshift_connection(**kwargs):
+    conn = BaseHook.get_connection("redshift")  # need to create this Connection first
+    print(
+        "Redshift details",
+        conn.conn_type,
+        conn.host,
+        conn.port,
+        conn.login,
+        conn.get_password(),
+    )
+
+
 dag = DAG(
     "dbt-dag-connection",
     description="Trying to get dbt to work",
@@ -19,7 +33,6 @@ dag = DAG(
     catchup=False,
     is_paused_upon_creation=False,
 )
-
 
 bash_op1 = BashOperator(task_id="dbt1", bash_command="dbt --version", dag=dag)
 bash_op2 = BashOperator(
@@ -43,5 +56,10 @@ bash_op4 = BashOperator(
     bash_command=f"{MWAA_DBT_PREFIX_COMMAND} && export REDSHIFT_HOST={{{{ conn.redshift.host }}}} && export REDSHIFT_PASSWORD={{{{ conn.redshift.password }}}} && dbt test --profiles-dir profile_connection/",
     dag=dag,
 )
+get_redshift_connection_task = PythonOperator(
+    task_id="get_redshift_connection_task",
+    python_callable=get_redshift_connection,
+    dag=dag,
+)
 
-bash_op1 >> [bash_op2, bash_op3, bash_op4]
+bash_op1 >> [bash_op2, bash_op3, bash_op4, get_redshift_connection_task]
