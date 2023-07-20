@@ -1,8 +1,10 @@
+import os
 from datetime import datetime
 
 from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
+from airflow.utils.dates import days_ago
 
 
 def s3_hook_examples():
@@ -39,10 +41,10 @@ def write_s3_file(**kwargs):
 
 
 with DAG(
-    "s3-hook-dag",
+    os.path.basename(__file__).replace(".py", ""),  # "s3-hook-dag",
     description="S3 practice",
     schedule_interval=None,
-    start_date=datetime(2017, 3, 20),
+    start_date=days_ago(1),
     catchup=False,
     is_paused_upon_creation=False,
     tags=["eugene"],
