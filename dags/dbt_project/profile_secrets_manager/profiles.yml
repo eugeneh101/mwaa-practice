@@ -1,0 +1,14 @@
+dbt_practice:
+  target: sample_data_dev  # remember to manually load data
+  outputs:
+    sample_data_dev:
+      type: redshift
+      threads: 2
+      host: "{{ env_var('REDSHIFT_HOST') }}"  # Secrets Manager will contain this 
+      port: 5439
+      user: admin
+      password: "{{ env_var('REDSHIFT_PASSWORD') }}"  # Secrets Manager will contain this
+      dbname: sample_data_dev
+      schema: tickit  # remember to manually load data
+config:
+  send_anonymous_usage_stats: False

@@ -12,7 +12,7 @@ MWAA_DBT_PREFIX_COMMAND = (
 )
 
 dag = DAG(
-    "dbt-dag",
+    "dbt-dag-secrets-manager",
     description="Trying to get dbt to work",
     schedule_interval=None,
     start_date=datetime(2017, 3, 20),
@@ -21,31 +21,15 @@ dag = DAG(
 )
 
 
-def current_location(**kwargs):
-    import pathlib
-
-    print("kwargs: ", kwargs)
-    print("file is in: ", pathlib.Path(__file__).parent.resolve())
-
-
-python_op = PythonOperator(
-    task_id="print_the_context",
-    provide_context=True,
-    python_callable=current_location,
-    op_kwargs={"name": "Data Rocks"},
-    dag=dag,
-)
-
-bash_op0 = BashOperator(task_id="dbt0", bash_command="pwd", dag=dag)
 bash_op1 = BashOperator(task_id="dbt1", bash_command="dbt --version", dag=dag)
 bash_op2 = BashOperator(
     task_id="dbt2",  # task fails because does not have permissions to run git
-    bash_command=f"{MWAA_DBT_PREFIX_COMMAND} && dbt debug",  # --log-path CLI doesn't seem to work
+    bash_command=f"{MWAA_DBT_PREFIX_COMMAND} && export REDSHIFT_HOST={{{{ var.value.redshift_host }}}} && export REDSHIFT_PASSWORD={{{{ var.value.redshift_password }}}} && dbt debug --profiles-dir profile_secrets_manager/",  # --log-path CLI doesn't seem to work
     dag=dag,
 )
 bash_op3 = BashOperator(
     task_id="dbt3",  ### have to manually click to create the Redshift database
-    bash_command=f"{MWAA_DBT_PREFIX_COMMAND} && dbt run",
+    bash_command=f"{MWAA_DBT_PREFIX_COMMAND} && export REDSHIFT_HOST={{{{ var.value.redshift_host }}}} && export REDSHIFT_PASSWORD={{{{ var.value.redshift_password }}}} && dbt run --profiles-dir profile_secrets_manager/",
     # bash_command=" ".join([
     #     "DBT_TARGET_PATH=/tmp/dbt/target",  # if don't use `target-path` in dbt_project.yml
     #     "DBT_LOG_PATH=/tmp/dbt/logs",  # if don't use `log-path` in dbt_project.yml
@@ -56,8 +40,8 @@ bash_op3 = BashOperator(
 )
 bash_op4 = BashOperator(
     task_id="dbt4",  ### have to manually click to create the Redshift database
-    bash_command=f"{MWAA_DBT_PREFIX_COMMAND} && dbt test",
+    bash_command=f"{MWAA_DBT_PREFIX_COMMAND} && export REDSHIFT_HOST={{{{ var.value.redshift_host }}}} && export REDSHIFT_PASSWORD={{{{ var.value.redshift_password }}}} && dbt test --profiles-dir profile_secrets_manager/",
     dag=dag,
 )
 
-python_op >> bash_op0 >> bash_op1 >> [bash_op2, bash_op3, bash_op4]
+bash_op1 >> [bash_op2, bash_op3, bash_op4]

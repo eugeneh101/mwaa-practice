@@ -92,11 +92,26 @@ get_redshift_secret = BashOperator(
     task_id="get_redshift_password_from_secrets_manager",
     bash_command="echo 'The value of the variable is: {var}'".format(
         var=Variable.get(
-            "redshift-password",  # hard coded secret deployed by CDK
+            "redshift_password",  # hard coded secret deployed by CDK
             default_var="couldn't get the secret",
         )
     ),
 )
+get_redshift_secret_jinja = BashOperator(
+    task_id="get_redshift_password_from_secrets_manager_jinja",
+    bash_command="echo 'The value of the variable is: {{ var.value.redshift_password }}'",  # jinja seems to also allow "-" in variable name
+)
+
+
+echo_nonexistent_var_with_default = BashOperator(
+    task_id="get_nonexistent_var_with_default",
+    bash_command="echo 'The value of the variable is: {{ var.value.get('non_existent_var', 'okay default') }}'",
+)
+echo_nonexistent_var = BashOperator(
+    task_id="get_nonexistent_var",
+    bash_command="echo 'The value of the variable is: {{ var.value.non_existent_var }}'",  # this will fail
+)
+
 
 (
     echo_var
@@ -106,4 +121,7 @@ get_redshift_secret = BashOperator(
     >> get_json_var_task
     >> set_var_task
     >> get_redshift_secret
+    >> get_redshift_secret_jinja
+    >> echo_nonexistent_var_with_default
+    >> echo_nonexistent_var
 )

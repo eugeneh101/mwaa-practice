@@ -4,10 +4,10 @@ dbt_practice:
     sample_data_dev:
       type: redshift
       threads: 2
-      host: ...  # figure this out
+      host: mwaa-practice-redshift-cluster.chhmiqf5pjdj.us-east-1.redshift.amazonaws.com  # figure this out
       port: 5439
-      user: ...
-      pass: ...
+      user: admin
+      pass: Password1
       dbname: sample_data_dev
       schema: tickit  # remember to manually load data
 config:

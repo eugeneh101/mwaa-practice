@@ -374,17 +374,6 @@ class MwaaPracticeStack(Stack):
             # kms_key=key.key_arn,
         )
 
-        redshift_password_secret = secrets_manager.Secret(
-            self,
-            "RedshiftSecret",
-            removal_policy=RemovalPolicy.DESTROY,
-            secret_name="airflow/variables/redshift-password",
-            secret_string_value=SecretValue.unsafe_plain_text(
-                secret=environment["REDSHIFT_DETAILS"]["REDSHIFT_PASSWORD"]
-            ),
-            # description=None,
-        )
-
         if environment["REDSHIFT_DETAILS"]["TURN_ON_REDSHIFT_CLUSTER"]:
             self.security_group.add_ingress_rule(
                 peer=ec2.Peer.any_ipv4(),
@@ -396,6 +385,26 @@ class MwaaPracticeStack(Stack):
                 vpc=self.vpc,
                 security_group=self.security_group,
                 environment=environment,
+            )
+            redshift_host_secret = secrets_manager.Secret(
+                self,
+                "RedshiftHostSecret",
+                removal_policy=RemovalPolicy.DESTROY,
+                secret_name="airflow/variables/redshift_host",
+                secret_string_value=SecretValue.unsafe_plain_text(
+                    secret=self.redshift_service.redshift_cluster.attr_endpoint_address
+                ),
+                # description=None,
+            )
+            redshift_password_secret = secrets_manager.Secret(
+                self,
+                "RedshiftPasswordSecret",
+                removal_policy=RemovalPolicy.DESTROY,
+                secret_name="airflow/variables/redshift_password",
+                secret_string_value=SecretValue.unsafe_plain_text(
+                    secret=environment["REDSHIFT_DETAILS"]["REDSHIFT_PASSWORD"]
+                ),
+                # description=None,
             )
 
         # connect AWS resources together
