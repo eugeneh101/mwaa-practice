@@ -243,15 +243,13 @@ class MwaaPracticeStack(Stack):
                         "kms:DescribeKey",
                         "kms:GenerateDataKey*",
                         "kms:Encrypt",
-                        "kms:PutKeyPolicy",
                     ],
                     effect=iam.Effect.ALLOW,
-                    resources=["*"],
+                    not_resources=[f"arn:aws:kms:*:{self.account}:key/*"],
                     conditions={
                         "StringEquals": {
                             "kms:ViaService": [
-                                f"sqs.{self.region}.amazonaws.com",
-                                f"s3.{self.region}.amazonaws.com",
+                                f"sqs.{self.region}.amazonaws.com"
                             ]
                         }
                     },
