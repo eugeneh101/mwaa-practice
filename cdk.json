@@ -5,11 +5,13 @@
           "AWS_REGION": "us-east-1",
           "S3_BUCKET_NAME": "mwaa-practice-bucket",
           "MWAA_CLUSTER_NAME": "mwaa-practice-cluster",
+          "MWAA_VERSION": "2.6.3",
           "MWAA_SIZE": "mw1.small",
           "MWAA_ROLE_NAME": "mwaa-practice-role",
           "DAGS_FOLDER": "dags",
           "REQUIREMENTS_FOLDER": "requirements",
           "REQUIREMENTS_VERSION": false,
+          "STARTUP_SCRIPT_VERSION": false,
           "CLOUDFORMATION_BUCKET": "...",
           "REDSHIFT_DETAILS": {
               "TURN_ON_REDSHIFT_CLUSTER": true,

@@ -248,9 +248,7 @@ class MwaaPracticeStack(Stack):
                     not_resources=[f"arn:aws:kms:*:{self.account}:key/*"],
                     conditions={
                         "StringEquals": {
-                            "kms:ViaService": [
-                                f"sqs.{self.region}.amazonaws.com"
-                            ]
+                            "kms:ViaService": [f"sqs.{self.region}.amazonaws.com"]
                         }
                     },
                 ),
@@ -332,6 +330,20 @@ class MwaaPracticeStack(Stack):
             ),
         )
 
+        requirements_s3_object_version = (  # look in S3 console for requirements.txt version
+            environment["REQUIREMENTS_VERSION"]
+            if environment[
+                "REQUIREMENTS_VERSION"
+            ]  # cdk.json can't seem to recognize null as a valid value, so use false instead
+            else None
+        )
+        startup_script_object_version = (  # look in S3 console for startup.sh version
+            environment["STARTUP_SCRIPT_VERSION"]
+            if environment[
+                "STARTUP_SCRIPT_VERSION"
+            ]  # cdk.json can't seem to recognize null as a valid value, so use false instead
+            else None
+        )
         self.mwaa_cluster = mwaa.CfnEnvironment(
             self,
             "MwaaCluster",
@@ -353,11 +365,9 @@ class MwaaPracticeStack(Stack):
             },
             dag_s3_path=environment["DAGS_FOLDER"],
             requirements_s3_path=f"{environment['REQUIREMENTS_FOLDER']}/requirements.txt",
-            requirements_s3_object_version=environment[
-                "REQUIREMENTS_VERSION"
-            ]  # look in S3 console for requirements.txt version
-            if environment["REQUIREMENTS_VERSION"]
-            else None,  # cdk.json can't seem to recognize null as a valid value, so use false instead
+            requirements_s3_object_version=requirements_s3_object_version,
+            startup_script_s3_path=f"{environment['REQUIREMENTS_FOLDER']}/startup.sh",
+            startup_script_s3_object_version=startup_script_object_version,
             environment_class=environment["MWAA_SIZE"],
             max_workers=2,  ### change later
             execution_role_arn=self.mwaa_service_role.role_arn,
@@ -365,7 +375,7 @@ class MwaaPracticeStack(Stack):
             network_configuration=network_configuration,
             source_bucket_arn=self.dags_bucket.bucket_arn,
             webserver_access_mode="PUBLIC_ONLY",
-            airflow_version="2.5.1",
+            airflow_version=environment["MWAA_VERSION"],
             # plugins_s3_object_version=None,
             # plugins_s3_path=None,
             # weekly_maintenance_window_start=None,
