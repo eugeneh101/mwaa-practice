@@ -16,16 +16,7 @@ dag = DAG(
     dagrun_timeout=timedelta(minutes=120),
 )
 
-# Get ECS configuration from SSM parameters
-# ecs_cluster               = str(ssm.get_parameter(Name='/mwaa/ecs/cluster', WithDecryption=True)['Parameter']['Value'])
-# ecs_task_definition       = str(ssm.get_parameter(Name='/mwaa/ecs/task_definition', WithDecryption=True)['Parameter']['Value'])
-# ecs_subnets               = str(ssm.get_parameter(Name='/mwaa/vpc/private_subnets', WithDecryption=True)['Parameter']['Value'])
-# ecs_security_group        = str(ssm.get_parameter(Name='/mwaa/vpc/security_group', WithDecryption=True)['Parameter']['Value'])
-# ecs_awslogs_group         = str(ssm.get_parameter(Name='/mwaa/cw/log_group', WithDecryption=True)['Parameter']['Value'])
-# ecs_awslogs_stream_prefix = str(ssm.get_parameter(Name='/mwaa/cw/log_stream', WithDecryption=True)['Parameter']['Value'])
-
-# Run Docker container via ECS operator
-task_ecs_operator = EcsRunTaskOperator(
+task_ecs_operator = EcsRunTaskOperator(  # run Docker container via ECS operator
     task_id="ecs_operator",
     dag=dag,
     aws_conn_id="aws_ecs",
@@ -40,7 +31,7 @@ task_ecs_operator = EcsRunTaskOperator(
                 "name": "ecs-task-for-mwaa",  ### hard coded
                 "cpu": 1024,  # yes, have to repeat "cpu"
                 "memory": 2048,  # yes, have to repeat "memory"
-                "command": ["sleep", "3"],
+                # "command": ["sleep", "3"],
                 # "command": ["sleep", "3", "&&", "exit", "2"],
                 "environment": [
                     {"name": "KEY1", "value": "VALUE1"},
@@ -56,6 +47,6 @@ task_ecs_operator = EcsRunTaskOperator(
             "subnets": ["subnet-029e4d8b04d643128"],  ### hard coded private subnet
         },
     },
-    # awslogs_group=ecs_awslogs_group,
-    # awslogs_stream_prefix=ecs_awslogs_stream_prefix
+    awslogs_group="airflow-mwaa-practice-cluster-Task",  ### hard coded
+    awslogs_stream_prefix="ecs/ecs-task-for-mwaa",  ### hard coded
 )

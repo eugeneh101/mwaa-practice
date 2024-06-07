@@ -10,4 +10,3 @@ if __name__ == "__main__":
     for i in range(60):
         print(i)
         time.sleep(1)
-        # return {"hi": "thanks"}
