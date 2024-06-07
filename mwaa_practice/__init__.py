@@ -1,12 +1,19 @@
 import json
 
+# aws_cdk does not have native way to push container image to ECR
+# (other than `container-assets` ECR repo), so have to use `cdk_ecr_deployment`
+import cdk_ecr_deployment as ecr_deploy
 from aws_cdk import (
     # CfnOutput,
     RemovalPolicy,
     SecretValue,
     Stack,
     aws_ec2 as ec2,
+    aws_ecr as ecr,
+    aws_ecr_assets as ecr_assets,
+    aws_ecs as ecs,
     aws_iam as iam,
+    aws_logs as logs,
     aws_mwaa as mwaa,
     aws_redshift as redshift,
     aws_s3 as s3,
@@ -471,16 +478,7 @@ class MwaaPracticeStack(Stack):
 
 
         if environment["ECS_DETAILS"]["TURN_ON_ECS_CLUSTER"]:
-            # aws_cdk does not have native way to push container image to ECR
-            # (other than `container-assets` ECR repo), so have to use `cdk_ecr_deployment`
-            import cdk_ecr_deployment as ecr_deploy
-            from aws_cdk import (
-                aws_ecr as ecr,
-                aws_ecr_assets as ecr_assets,
-                aws_ecs as ecs,
-                aws_logs as logs,
-            )
-            ## deal with subnet stuff
+            ## deal with subnet stuff during stack setup
             self.ecr_repo = ecr.Repository(
                 self,
                 "EcrRepo",
@@ -506,14 +504,15 @@ class MwaaPracticeStack(Stack):
                 src=ecr_deploy.DockerImageName(task_asset.image_uri),
                 dest=ecr_deploy.DockerImageName(self.ecr_repo.repository_uri),
             )
-            # log_group = logs.LogGroup(
-            #     stack,
-            #     f"TaskLogGroup{task_definition_name}",
-            #     log_group_name=f"/ecs/{task_definition_name}",
-            #     retention=logs.RetentionDays.ONE_MONTH,
-            #     removal_policy=RemovalPolicy.DESTROY,
-            # )
             task_image = ecs.ContainerImage.from_ecr_repository(repository=self.ecr_repo)
+            ### figure out how to expire old images
+            mwaa_task_log_group = logs.LogGroup(
+                self,
+                "MwaaTaskLogGroup",
+                log_group_name=f"airflow-{environment['MWAA_CLUSTER_NAME']}-Task",
+                retention=logs.RetentionDays.ONE_MONTH,
+                removal_policy=RemovalPolicy.DESTROY,
+            )
             task_definition = ecs.TaskDefinition(
                 self,
                 "TaskDefinition",
@@ -533,11 +532,11 @@ class MwaaPracticeStack(Stack):
             container = task_definition.add_container(
                 environment["ECS_DETAILS"]["ECS_TASK_DEFINITION_NAME"],
                 image=task_image,
-                # logging=ecs.LogDrivers.aws_logs(
-                #     stream_prefix="ecs",
-                #     log_group=log_group,
-                #     mode=ecs.AwsLogDriverMode.NON_BLOCKING,
-                # ),
+                logging=ecs.LogDrivers.aws_logs(
+                    stream_prefix="ecs",
+                    log_group=mwaa_task_log_group,
+                    mode=ecs.AwsLogDriverMode.NON_BLOCKING,
+                ),
                 environment={},
             )
             # container.add_port_mappings(ecs.PortMapping(container_port=80))
