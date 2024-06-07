@@ -6,6 +6,8 @@ import time
 
 
 if __name__ == "__main__":
+    print("env vars", os.environ)
     for i in range(60):
         print(i)
         time.sleep(1)
+        # return {"hi": "thanks"}

@@ -33,12 +33,20 @@ task_ecs_operator = EcsRunTaskOperator(
     task_definition="ecs-task-for-mwaa",  ### hard coded
     launch_type="FARGATE",
     overrides={
-        # "containerOverrides": [
-        #     {  ### add in environment variables
-        #         "name": "hello-world",
-        #         "command": ["/hello"],
-        #     },
-        # ],
+        "cpu": "1024",  # 1 CPU
+        "memory": "2048",  # 2 GB RAM
+        "containerOverrides": [
+            {
+                "name": "ecs-task-for-mwaa",  ### hard coded
+                "cpu": 1024,  # yes, have to repeat "cpu"
+                "memory": 2048,  # yes, have to repeat "memory"
+                # "command": ["sleep", "3", "&&", "exit", "1"],
+                "environment": [
+                    {"name": "KEY1", "value": "VALUE1"},
+                    {"name": "KEY2", "value": "VALUE2"},
+                ],
+            },
+        ],
     },
     network_configuration={
         "awsvpcConfiguration": {
