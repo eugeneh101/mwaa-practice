@@ -1,3 +1,4 @@
+import os
 from datetime import timedelta
 
 from airflow import DAG
@@ -29,7 +30,7 @@ def hello(**kwargs):
 
 
 dag = DAG(
-    "example-dag",
+    os.path.basename(__file__).replace(".py", ""),  # "example-dag",
     default_args=default_args,
     description="A simple tutorial DAG",
     schedule_interval="*/5 * * * *",

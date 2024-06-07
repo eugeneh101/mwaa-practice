@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 
 from airflow import DAG
@@ -10,7 +11,7 @@ def print_hello():
 
 
 dag = DAG(
-    "sample-dag",
+    os.path.basename(__file__).replace(".py", ""),  # "sample-dag",
     description="Hello world example",
     schedule_interval="*/5 * * * *",
     start_date=datetime(2017, 3, 20),

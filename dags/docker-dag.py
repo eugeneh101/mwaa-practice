@@ -1,3 +1,4 @@
+import os
 from datetime import datetime, timedelta
 
 from airflow import DAG
@@ -7,7 +8,7 @@ from airflow.operators.dummy_operator import DummyOperator
 
 
 dag = DAG(
-    "docker-dag",
+    os.path.basename(__file__).replace(".py", ""),  # "docker-dag",
     description="Trying to use a Docker image",
     schedule_interval=None,
     start_date=datetime(2017, 3, 20),

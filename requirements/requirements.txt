@@ -1,6 +1,7 @@
 --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-2.6.3/constraints-3.10.txt"
- # For any dependencies that don't match the constraint file,
- # put in startup.sh. This is not the ideal situation; it is a hack.
- # The better way is to create your own constraint file.
- pandas==1.5.3  # matches Airflow 2.6.3 constraint file above
- openpyxl==3.1.2  # matches Airflow 2.6.3 constraint file above
+# For any dependencies that don't match the constraint file,
+# put in startup.sh. This is not the ideal situation; it is a hack.
+# The better way is to create your own constraint file.
+apache-airflow-providers-amazon==8.2.0  # matches Airflow 2.6.3 constraint file above
+pandas==1.5.3  # matches Airflow 2.6.3 constraint file above
+openpyxl==3.1.2  # matches Airflow 2.6.3 constraint file above

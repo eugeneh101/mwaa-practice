@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 
 from airflow import DAG
@@ -55,7 +56,7 @@ def set_variable(**kwargs):
 
 
 dag = DAG(
-    "variable-and-secret-dag",
+    os.path.basename(__file__).replace(".py", ""),  # "variable-and-secret-dag",
     description="variable/secret practice",
     schedule_interval=None,
     start_date=datetime(2017, 3, 20),

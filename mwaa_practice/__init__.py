@@ -1,7 +1,7 @@
 import json
 
 from aws_cdk import (
-    CfnOutput,
+    # CfnOutput,
     RemovalPolicy,
     SecretValue,
     Stack,
@@ -69,7 +69,7 @@ class MwaaPracticeStack(Stack):
         self.vpc = ec2.Vpc(
             self,
             "MwaaVpc",
-            vpc_name="mwaa-vpc",  # hard coded
+            vpc_name=environment["VPC_NAME"],
             max_azs=2,  # MWAA needs 2 private subnets in different AZs
             nat_gateways=1,
             subnet_configuration=[
@@ -89,7 +89,10 @@ class MwaaPracticeStack(Stack):
             # enable_dns_support=True,
         )
         self.security_group = ec2.SecurityGroup(
-            self, "MwaaSg", vpc=self.vpc, security_group_name="mwaa-sg"  # hard coded
+            self,
+            "MwaaSg",
+            vpc=self.vpc,
+            security_group_name=environment["SECURITY_GROUP_NAME"],
         )
         self.security_group.connections.allow_internally(
             port_range=ec2.Port.all_traffic(), description="MWAA"
@@ -102,73 +105,6 @@ class MwaaPracticeStack(Stack):
             versioned=True,  # needed by MWAA
             removal_policy=RemovalPolicy.DESTROY,
             auto_delete_objects=True,
-        )
-        lambda_policy_document = iam.PolicyDocument(
-            statements=[
-                iam.PolicyStatement(
-                    actions=["s3:GetObject*", "s3:GetBucket*", "s3:List*"],
-                    resources=[
-                        f"arn:aws:s3:::{environment['CLOUDFORMATION_BUCKET']}",
-                        f"arn:aws:s3:::{environment['CLOUDFORMATION_BUCKET']}/*",
-                    ],
-                ),
-                iam.PolicyStatement(
-                    actions=[
-                        "s3:GetObject*",
-                        "s3:GetBucket*",
-                        "s3:List*",
-                        "s3:DeleteObject*",
-                        "s3:PutObject",
-                        "s3:PutObjectLegalHold",
-                        "s3:PutObjectRetention",
-                        "s3:PutObjectTagging",
-                        "s3:PutObjectVersionTagging",
-                        "s3:Abort*",
-                    ],
-                    resources=[
-                        self.dags_bucket.bucket_arn,
-                        self.dags_bucket.bucket_arn + "/*",
-                    ],
-                ),
-            ]
-        )
-        s3_upload_delete_role = iam.Role(
-            self,
-            "S3UploadDeleteRole",
-            role_name="s3-upload-delete-role",  # hard coded
-            assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
-            managed_policies=[
-                iam.ManagedPolicy.from_aws_managed_policy_name(
-                    "service-role/AWSLambdaBasicExecutionRole"
-                )
-            ],
-            inline_policies={"LambdaPolicyDocument": lambda_policy_document},
-        )
-        airflow_dags = s3_deploy.BucketDeployment(  # upload dags to S3
-            self,
-            "DeployDAG",
-            destination_bucket=self.dags_bucket,
-            destination_key_prefix=environment["DAGS_FOLDER"],
-            sources=[s3_deploy.Source.asset("./dags")],  # hard coded
-            prune=True,  ### it seems that delete Lambda uses a different IAM role
-            retain_on_delete=False,
-            role=s3_upload_delete_role,
-            # vpc=...,
-            # vpc_subnets=...,
-        )
-        airflow_requirements = s3_deploy.BucketDeployment(  # upload requirements to S3
-            self,
-            "DeployRequirements",
-            destination_bucket=self.dags_bucket,
-            destination_key_prefix=environment["REQUIREMENTS_FOLDER"],
-            sources=[
-                s3_deploy.Source.asset("./requirements", exclude=[".venv/*"])
-            ],  # hard coded
-            prune=True,  ### it seems that delete Lambda uses a different IAM role
-            retain_on_delete=False,
-            role=s3_upload_delete_role,
-            # vpc=...,
-            # vpc_subnets=...,
         )
 
         mwaa_policy_document = iam.PolicyDocument(
@@ -295,19 +231,46 @@ class MwaaPracticeStack(Stack):
                 #     ),
             ]
         )
-        self.mwaa_service_role = iam.Role(
+        principals = [
+            iam.ServicePrincipal("airflow.amazonaws.com"),
+            iam.ServicePrincipal("airflow-env.amazonaws.com"),
+        ]
+        managed_policies = []
+        if environment["ECS_DETAILS"]["TURN_ON_ECS_CLUSTER"]:
+            principals.append(iam.ServicePrincipal("ecs-tasks.amazonaws.com"))
+            managed_policies.append(iam.ManagedPolicy.from_aws_managed_policy_name(
+                    "service-role/AmazonECSTaskExecutionRolePolicy"
+                ),  ### later principle of least privileges
+            )
+            mwaa_policy_document.add_statements(
+                iam.PolicyStatement(
+                    actions=["ecs:RunTask"],
+                    resources=[
+                        f"arn:aws:ecs:{environment['AWS_REGION']}:{self.account}:task-definition/*",  # hard coded, cut down on permissions later
+                    ],
+                ),
+                iam.PolicyStatement(
+                    actions=["iam:PassRole"],
+                    resources=[
+                        f"arn:aws:iam::{self.account}:role/*",
+                    ],
+                ),
+                iam.PolicyStatement(
+                    actions=["ecs:DescribeTasks"],
+                    resources=[
+                        f"arn:aws:ecs:{environment['AWS_REGION']}:{self.account}:task/*",  # hard coded, cut down on permissions later
+                    ],
+                ),
+            )
+        self.mwaa_role = iam.Role(
             self,
-            "MwaaServiceRole",  # hard coded
-            assumed_by=iam.CompositePrincipal(
-                iam.ServicePrincipal("airflow.amazonaws.com"),
-                iam.ServicePrincipal("airflow-env.amazonaws.com"),
-                # iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
-            ),
-            inline_policies={"CDKmwaaPolicyDocument": mwaa_policy_document},
-            path="/service-role/",
+            "MwaaRole",  # hard coded
             role_name=environment["MWAA_ROLE_NAME"],
+            assumed_by=iam.CompositePrincipal(*principals),
+            inline_policies={"CDKmwaaPolicyDocument": mwaa_policy_document},
+            managed_policies=managed_policies,
+            # path="/service-role/",
         )
-
         network_configuration = mwaa.CfnEnvironment.NetworkConfigurationProperty(
             security_group_ids=[self.security_group.security_group_id],
             subnet_ids=[subnet.subnet_id for subnet in self.vpc.private_subnets],
@@ -370,7 +333,7 @@ class MwaaPracticeStack(Stack):
             startup_script_s3_object_version=startup_script_object_version,
             environment_class=environment["MWAA_SIZE"],
             max_workers=2,  ### change later
-            execution_role_arn=self.mwaa_service_role.role_arn,
+            execution_role_arn=self.mwaa_role.role_arn,
             logging_configuration=logging_configuration,
             network_configuration=network_configuration,
             source_bucket_arn=self.dags_bucket.bucket_arn,
@@ -416,13 +379,168 @@ class MwaaPracticeStack(Stack):
             )
 
         # connect AWS resources together
+        lambda_policy_document = iam.PolicyDocument(
+            statements=[
+                iam.PolicyStatement(
+                    actions=["s3:GetObject*", "s3:GetBucket*", "s3:List*"],
+                    resources=[
+                        f"arn:aws:s3:::{environment['CLOUDFORMATION_BUCKET']}",
+                        f"arn:aws:s3:::{environment['CLOUDFORMATION_BUCKET']}/*",
+                    ],
+                ),
+                iam.PolicyStatement(
+                    actions=[
+                        "s3:GetObject*",
+                        "s3:GetBucket*",
+                        "s3:List*",
+                        "s3:DeleteObject*",
+                        "s3:PutObject",
+                        "s3:PutObjectLegalHold",
+                        "s3:PutObjectRetention",
+                        "s3:PutObjectTagging",
+                        "s3:PutObjectVersionTagging",
+                        "s3:Abort*",
+                    ],
+                    resources=[
+                        self.dags_bucket.bucket_arn,
+                        self.dags_bucket.bucket_arn + "/*",
+                    ],
+                ),
+            ]
+        )
+        s3_upload_delete_role = iam.Role(
+            self,
+            "S3UploadDeleteRole",
+            role_name=environment["S3_UPLOAD_ROLE"],  # s3-upload-delete-role",  # hard coded
+            assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
+            managed_policies=[
+                iam.ManagedPolicy.from_aws_managed_policy_name(
+                    "service-role/AWSLambdaBasicExecutionRole"
+                )
+            ],
+            inline_policies={"LambdaPolicyDocument": lambda_policy_document},
+        )
+        airflow_dags = s3_deploy.BucketDeployment(  # upload dags to S3
+            self,
+            "DeployDAG",
+            destination_bucket=self.dags_bucket,
+            destination_key_prefix=environment["DAGS_FOLDER"],
+            sources=[s3_deploy.Source.asset("./dags")],  # hard coded
+            prune=True,  ### it seems that delete Lambda uses a different IAM role
+            retain_on_delete=False,
+            role=s3_upload_delete_role,
+            # vpc=...,
+            # vpc_subnets=...,
+        )
+        airflow_requirements = s3_deploy.BucketDeployment(  # upload requirements to S3
+            self,
+            "DeployRequirements",
+            destination_bucket=self.dags_bucket,
+            destination_key_prefix=environment["REQUIREMENTS_FOLDER"],
+            sources=[
+                s3_deploy.Source.asset("./requirements", exclude=[".venv/*"])
+            ],  # hard coded
+            prune=True,  ### it seems that delete Lambda uses a different IAM role
+            retain_on_delete=False,
+            role=s3_upload_delete_role,
+            # vpc=...,
+            # vpc_subnets=...,
+        )
+
         self.mwaa_cluster.node.add_dependency(airflow_requirements)
 
         # write Cloudformation Outputs
-        CfnOutput(
-            self,
-            id="VPCId",  # Output omits underscores and hyphens
-            value=self.vpc.vpc_id,
+        # With nested stacks, you deploy and manage all resources from a single stack.
+        # You can use outputs from one stack in the nested stack group as inputs to
+        # another stack in the group. This differs from exporting values.
+        # CfnOutput(
+        #     self,
+        #     id="VPCId",  # Output omits underscores and hyphens
+        #     value=self.vpc.vpc_id,
+        #     description="VPC (with private subnets) for MWAA",
+        #     export_name=f"{self.region}:{self.account}:{self.stack_name}:vpc-id",
+        # )
+        # To share information between stacks, export a stack's output values.
+        # Other stacks that are in the same AWS account and region can import
+        # the exported values.
+        self.export_value(
+            name=f"{self.region}:{self.account}:{self.stack_name}:vpc-id",
+            exported_value=self.vpc.vpc_id,
             description="VPC (with private subnets) for MWAA",
-            export_name=f"{self.region}:{self.account}:{self.stack_name}:vpc-id",
         )
+
+
+        if environment["ECS_DETAILS"]["TURN_ON_ECS_CLUSTER"]:
+            # aws_cdk does not have native way to push container image to ECR
+            # (other than `container-assets` ECR repo), so have to use `cdk_ecr_deployment`
+            import cdk_ecr_deployment as ecr_deploy
+            from aws_cdk import (
+                aws_ecr as ecr,
+                aws_ecr_assets as ecr_assets,
+                aws_ecs as ecs,
+                aws_logs as logs,
+            )
+            ## deal with subnet stuff
+            self.ecr_repo = ecr.Repository(
+                self,
+                "EcrRepo",
+                repository_name=environment["ECS_DETAILS"]["ECR_REPO_NAME"],
+                auto_delete_images=True,
+                removal_policy=RemovalPolicy.DESTROY,
+            )
+
+            self.ecs_cluster = ecs.Cluster(
+                self,
+                "EcsCluster",
+                cluster_name=environment["ECS_DETAILS"]["ECS_CLUSTER_NAME"],
+                vpc=self.vpc,
+            )
+
+
+            task_asset = ecr_assets.DockerImageAsset(
+                self, "EcrImage", directory="service"  # hard coded
+            )  # uploads to `container-assets` ECR repo
+            deploy_repo = ecr_deploy.ECRDeployment(  # upload to desired ECR repo
+                self,
+                "PushTaskImage",
+                src=ecr_deploy.DockerImageName(task_asset.image_uri),
+                dest=ecr_deploy.DockerImageName(self.ecr_repo.repository_uri),
+            )
+            # log_group = logs.LogGroup(
+            #     stack,
+            #     f"TaskLogGroup{task_definition_name}",
+            #     log_group_name=f"/ecs/{task_definition_name}",
+            #     retention=logs.RetentionDays.ONE_MONTH,
+            #     removal_policy=RemovalPolicy.DESTROY,
+            # )
+            task_image = ecs.ContainerImage.from_ecr_repository(repository=self.ecr_repo)
+            task_definition = ecs.TaskDefinition(
+                self,
+                "TaskDefinition",
+                family=environment["ECS_DETAILS"]["ECS_TASK_DEFINITION_NAME"],
+                compatibility=ecs.Compatibility.FARGATE,
+                runtime_platform=ecs.RuntimePlatform(
+                    operating_system_family=ecs.OperatingSystemFamily.LINUX,
+                    cpu_architecture=ecs.CpuArchitecture.X86_64,
+                ),
+                cpu="256",  # 0.25 CPU
+                memory_mib="512",  # 0.5 GB RAM
+                # ephemeral_storage_gib=None,
+                # volumes=None,
+                execution_role=self.mwaa_role,
+                task_role=self.mwaa_role,
+            )
+            container = task_definition.add_container(
+                environment["ECS_DETAILS"]["ECS_TASK_DEFINITION_NAME"],
+                image=task_image,
+                # logging=ecs.LogDrivers.aws_logs(
+                #     stream_prefix="ecs",
+                #     log_group=log_group,
+                #     mode=ecs.AwsLogDriverMode.NON_BLOCKING,
+                # ),
+                environment={},
+            )
+            # container.add_port_mappings(ecs.PortMapping(container_port=80))
+
+            # make sure repo created before task definition
+            task_definition.node.add_dependency(deploy_repo)
