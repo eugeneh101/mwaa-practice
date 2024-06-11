@@ -28,7 +28,8 @@
                 "ECR_REPO_NAME": "mwaa-ecr-repo",
                 "ECS_CLUSTER_NAME": "ecs-cluster-for-mwaa",
                 "ECS_TASK_DEFINITION_NAME": "ecs-task-for-mwaa",
-                "ECS_SERVICE_NAME": "ecs-service-for-mwaa"
+                "ECS_SERVICE_NAME": "ecs-service-for-mwaa",
+                "ALLOW_MWAA_TO_TERMINATE_ECS_TASK": true
             }
         }
     }

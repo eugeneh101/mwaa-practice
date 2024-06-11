@@ -244,8 +244,14 @@ class MwaaPracticeStack(Stack):
         ]
         managed_policies = []
         if environment["ECS_DETAILS"]["TURN_ON_ECS_CLUSTER"]:
-            principals.append(iam.ServicePrincipal("ecs-tasks.amazonaws.com"))
-            managed_policies.append(iam.ManagedPolicy.from_aws_managed_policy_name(
+            principals.extend(
+                [
+                    iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
+                    # iam.ServicePrincipal("lambda.amazonaws.com"),  # for ECR deployment
+                ]
+            )
+            managed_policies.append(
+                iam.ManagedPolicy.from_aws_managed_policy_name(
                     "service-role/AmazonECSTaskExecutionRolePolicy"
                 ),  ### later principle of least privileges
             )
@@ -259,16 +265,31 @@ class MwaaPracticeStack(Stack):
                 iam.PolicyStatement(
                     actions=["iam:PassRole"],
                     resources=[
-                        f"arn:aws:iam::{self.account}:role/*",
+                        f"arn:aws:iam::{self.account}:role/{environment['MWAA_ROLE_NAME']}",
                     ],
                 ),
                 iam.PolicyStatement(
                     actions=["ecs:DescribeTasks"],
                     resources=[
-                        f"arn:aws:ecs:{environment['AWS_REGION']}:{self.account}:task/*",  # hard coded, cut down on permissions later
+                        (
+                            f"arn:aws:ecs:{environment['AWS_REGION']}:{self.account}:task/"
+                            f"{environment['ECS_DETAILS']['ECS_CLUSTER_NAME']}/*"
+                        ),
                     ],
                 ),
             )
+            if environment["ECS_DETAILS"]["ALLOW_MWAA_TO_TERMINATE_ECS_TASK"]:
+                mwaa_policy_document.add_statements(
+                    iam.PolicyStatement(
+                        actions=["ecs:StopTask"],
+                        resources=[
+                            (
+                                f"arn:aws:ecs:{environment['AWS_REGION']}:{self.account}:task/"
+                                f"{environment['ECS_DETAILS']['ECS_CLUSTER_NAME']}/*"
+                            ),
+                        ],
+                    ),
+                )
         self.mwaa_role = iam.Role(
             self,
             "MwaaRole",  # hard coded
@@ -385,6 +406,84 @@ class MwaaPracticeStack(Stack):
                 # description=None,
             )
 
+        if environment["ECS_DETAILS"]["TURN_ON_ECS_CLUSTER"]:
+            ## deal with subnet stuff during stack setup
+            self.ecs_cluster = ecs.Cluster(
+                self,
+                "EcsCluster",
+                cluster_name=environment["ECS_DETAILS"]["ECS_CLUSTER_NAME"],
+                vpc=self.vpc,
+            )
+            self.ecr_repo = ecr.Repository(
+                self,
+                "EcrRepo",
+                repository_name=environment["ECS_DETAILS"]["ECR_REPO_NAME"],
+                # lifecycle_rules=[
+                #     ecr.LifecycleRule(
+                #         max_image_count=1,  # hard coded
+                #         description="Delete old images that are not the latest",
+                #     )
+                # ],
+                removal_policy=RemovalPolicy.DESTROY,
+                auto_delete_images=True,
+            )
+            # self.ecr_repo.add_lifecycle_rule(
+            #     description="Delete old images that are not the latest",
+            #     max_image_count=1  # hard coded
+            #     # tag_prefix_list=[],
+            # )
+            task_asset = ecr_assets.DockerImageAsset(
+                self, "EcrImage", directory="service"  # hard coded
+            )  # uploads to `container-assets` ECR repo
+            deploy_repo = ecr_deploy.ECRDeployment(  # upload to desired ECR repo
+                self,
+                "PushTaskImage",
+                src=ecr_deploy.DockerImageName(task_asset.image_uri),
+                dest=ecr_deploy.DockerImageName(self.ecr_repo.repository_uri),
+                # role=self.mwaa_role,
+            )
+            task_image = ecs.ContainerImage.from_ecr_repository(
+                repository=self.ecr_repo
+            )
+            ### figure out how to expire old images
+            mwaa_task_log_group = logs.LogGroup(
+                self,
+                "MwaaTaskLogGroup",
+                log_group_name=f"airflow-{environment['MWAA_CLUSTER_NAME']}-Task",
+                retention=logs.RetentionDays.ONE_MONTH,
+                removal_policy=RemovalPolicy.DESTROY,
+            )
+            task_definition = ecs.TaskDefinition(
+                self,
+                "TaskDefinition",
+                family=environment["ECS_DETAILS"]["ECS_TASK_DEFINITION_NAME"],
+                compatibility=ecs.Compatibility.FARGATE,
+                runtime_platform=ecs.RuntimePlatform(
+                    operating_system_family=ecs.OperatingSystemFamily.LINUX,
+                    cpu_architecture=ecs.CpuArchitecture.X86_64,
+                ),
+                cpu="256",  # 0.25 CPU
+                memory_mib="512",  # 0.5 GB RAM
+                # ephemeral_storage_gib=None,
+                # volumes=None,
+                execution_role=self.mwaa_role,
+                task_role=self.mwaa_role,
+            )
+            container = task_definition.add_container(
+                environment["ECS_DETAILS"]["ECS_TASK_DEFINITION_NAME"],
+                image=task_image,
+                logging=ecs.LogDrivers.aws_logs(
+                    stream_prefix="ecs",
+                    log_group=mwaa_task_log_group,
+                    mode=ecs.AwsLogDriverMode.NON_BLOCKING,
+                ),
+                environment={},
+            )
+            # container.add_port_mappings(ecs.PortMapping(container_port=80))
+
+            # make sure repo created before task definition
+            task_definition.node.add_dependency(deploy_repo)
+
         # connect AWS resources together
         lambda_policy_document = iam.PolicyDocument(
             statements=[
@@ -418,7 +517,9 @@ class MwaaPracticeStack(Stack):
         s3_upload_delete_role = iam.Role(
             self,
             "S3UploadDeleteRole",
-            role_name=environment["S3_UPLOAD_ROLE"],  # s3-upload-delete-role",  # hard coded
+            role_name=environment[
+                "S3_UPLOAD_ROLE"
+            ],  # role can also delete files during S3 sync
             assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
             managed_policies=[
                 iam.ManagedPolicy.from_aws_managed_policy_name(
@@ -475,71 +576,3 @@ class MwaaPracticeStack(Stack):
             exported_value=self.vpc.vpc_id,
             description="VPC (with private subnets) for MWAA",
         )
-
-
-        if environment["ECS_DETAILS"]["TURN_ON_ECS_CLUSTER"]:
-            ## deal with subnet stuff during stack setup
-            self.ecr_repo = ecr.Repository(
-                self,
-                "EcrRepo",
-                repository_name=environment["ECS_DETAILS"]["ECR_REPO_NAME"],
-                auto_delete_images=True,
-                removal_policy=RemovalPolicy.DESTROY,
-            )
-
-            self.ecs_cluster = ecs.Cluster(
-                self,
-                "EcsCluster",
-                cluster_name=environment["ECS_DETAILS"]["ECS_CLUSTER_NAME"],
-                vpc=self.vpc,
-            )
-
-
-            task_asset = ecr_assets.DockerImageAsset(
-                self, "EcrImage", directory="service"  # hard coded
-            )  # uploads to `container-assets` ECR repo
-            deploy_repo = ecr_deploy.ECRDeployment(  # upload to desired ECR repo
-                self,
-                "PushTaskImage",
-                src=ecr_deploy.DockerImageName(task_asset.image_uri),
-                dest=ecr_deploy.DockerImageName(self.ecr_repo.repository_uri),
-            )
-            task_image = ecs.ContainerImage.from_ecr_repository(repository=self.ecr_repo)
-            ### figure out how to expire old images
-            mwaa_task_log_group = logs.LogGroup(
-                self,
-                "MwaaTaskLogGroup",
-                log_group_name=f"airflow-{environment['MWAA_CLUSTER_NAME']}-Task",
-                retention=logs.RetentionDays.ONE_MONTH,
-                removal_policy=RemovalPolicy.DESTROY,
-            )
-            task_definition = ecs.TaskDefinition(
-                self,
-                "TaskDefinition",
-                family=environment["ECS_DETAILS"]["ECS_TASK_DEFINITION_NAME"],
-                compatibility=ecs.Compatibility.FARGATE,
-                runtime_platform=ecs.RuntimePlatform(
-                    operating_system_family=ecs.OperatingSystemFamily.LINUX,
-                    cpu_architecture=ecs.CpuArchitecture.X86_64,
-                ),
-                cpu="256",  # 0.25 CPU
-                memory_mib="512",  # 0.5 GB RAM
-                # ephemeral_storage_gib=None,
-                # volumes=None,
-                execution_role=self.mwaa_role,
-                task_role=self.mwaa_role,
-            )
-            container = task_definition.add_container(
-                environment["ECS_DETAILS"]["ECS_TASK_DEFINITION_NAME"],
-                image=task_image,
-                logging=ecs.LogDrivers.aws_logs(
-                    stream_prefix="ecs",
-                    log_group=mwaa_task_log_group,
-                    mode=ecs.AwsLogDriverMode.NON_BLOCKING,
-                ),
-                environment={},
-            )
-            # container.add_port_mappings(ecs.PortMapping(container_port=80))
-
-            # make sure repo created before task definition
-            task_definition.node.add_dependency(deploy_repo)
