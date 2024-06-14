@@ -414,23 +414,50 @@ class MwaaPracticeStack(Stack):
                 cluster_name=environment["ECS_DETAILS"]["ECS_CLUSTER_NAME"],
                 vpc=self.vpc,
             )
+            ### figure out how to expire old images
             self.ecr_repo = ecr.Repository(
                 self,
                 "EcrRepo",
                 repository_name=environment["ECS_DETAILS"]["ECR_REPO_NAME"],
-                # lifecycle_rules=[
-                #     ecr.LifecycleRule(
-                #         max_image_count=1,  # hard coded
-                #         description="Delete old images that are not the latest",
-                #     )
-                # ],
+                lifecycle_rules=[
+                    ecr.LifecycleRule(
+                        max_image_count=1,  # hard coded
+                        description="Delete old images that are not the latest",
+                    )
+                ],
                 removal_policy=RemovalPolicy.DESTROY,
-                auto_delete_images=True,
+                # auto_delete_images=True,  # just for testing
+                empty_on_delete=True,  # just for testing
             )
-            # self.ecr_repo.add_lifecycle_rule(
-            #     description="Delete old images that are not the latest",
-            #     max_image_count=1  # hard coded
-            #     # tag_prefix_list=[],
+            # self.mwaa_role.add_to_policy(
+            #     statement=iam.PolicyStatement(
+            #         actions=[
+            #             "ecr:GetAuthorizationToken",
+            #         ],
+            #         effect=iam.Effect.ALLOW,
+            #         resources="*",
+            #     )
+            # )
+            # self.mwaa_role.add_to_policy(
+            #     statement=iam.PolicyStatement(
+            #         actions=[
+            #             "ecr:BatchCheckLayerAvailability",
+            #             "ecr:GetDownloadUrlForLayer",
+            #             "ecr:GetRepositoryPolicy",
+            #             "ecr:DescribeRepositories",
+            #             "ecr:ListImages",
+            #             "ecr:DescribeImages",
+            #             "ecr:BatchGetImage",
+            #             "ecr:ListTagsForResource",
+            #             "ecr:DescribeImageScanFindings",
+            #             "ecr:InitiateLayerUpload",
+            #             "ecr:UploadLayerPart",
+            #             "ecr:CompleteLayerUpload",
+            #             "ecr:PutImage",
+            #         ],
+            #         effect=iam.Effect.ALLOW,
+            #         resources=[self.ecr_repo.repository_arn],
+            #     )
             # )
             task_asset = ecr_assets.DockerImageAsset(
                 self, "EcrImage", directory="service"  # hard coded
@@ -441,17 +468,22 @@ class MwaaPracticeStack(Stack):
                 src=ecr_deploy.DockerImageName(task_asset.image_uri),
                 dest=ecr_deploy.DockerImageName(self.ecr_repo.repository_uri),
                 # role=self.mwaa_role,
+                # role=self.mwaa_role.without_policy_updates(),
             )
             task_image = ecs.ContainerImage.from_ecr_repository(
                 repository=self.ecr_repo
             )
-            ### figure out how to expire old images
-            mwaa_task_log_group = logs.LogGroup(
+            # mwaa_task_log_group = logs.LogGroup(
+            #     self,
+            #     "MwaaTaskLogGroup",
+            #     log_group_name=f"airflow-{environment['MWAA_CLUSTER_NAME']}-Task",
+            #     retention=logs.RetentionDays.ONE_MONTH,
+            #     removal_policy=RemovalPolicy.DESTROY,
+            # )
+            mwaa_task_log_group = logs.LogGroup.from_log_group_name(
                 self,
                 "MwaaTaskLogGroup",
                 log_group_name=f"airflow-{environment['MWAA_CLUSTER_NAME']}-Task",
-                retention=logs.RetentionDays.ONE_MONTH,
-                removal_policy=RemovalPolicy.DESTROY,
             )
             task_definition = ecs.TaskDefinition(
                 self,

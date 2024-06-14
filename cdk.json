@@ -2,34 +2,40 @@
     "app": "python3 app.py",
     "context": {
         "environment": {
-            "AWS_REGION": "us-east-1",
-            "VPC_NAME": "mwaa-vpc",
-            "SECURITY_GROUP_NAME": "mwaa-sg",
-            "S3_BUCKET_NAME": "mwaa-practice-bucket",
-            "MWAA_CLUSTER_NAME": "mwaa-practice-cluster",
-            "MWAA_VERSION": "2.6.3",
-            "MWAA_SIZE": "mw1.small",
-            "MWAA_ROLE_NAME": "mwaa-practice-role",
-            "S3_UPLOAD_ROLE": "s3-upload-delete-role",
-            "DAGS_FOLDER": "dags",
-            "REQUIREMENTS_FOLDER": "requirements",
-            "REQUIREMENTS_VERSION": false,
-            "STARTUP_SCRIPT_VERSION": false,
-            "CLOUDFORMATION_BUCKET": "cdk-hnb659fds-assets-638141915324-us-east-1",
-            "REDSHIFT_DETAILS": {
-                "TURN_ON_REDSHIFT_CLUSTER": false,
-                "REDSHIFT_CLUSTER_NAME": "mwaa-practice-redshift-cluster",
-                "REDSHIFT_DATABASE_NAME": "dev",
-                "REDSHIFT_USERNAME": "admin",
-                "REDSHIFT_PASSWORD": "Password1"
+            "shared_variables": {
+                "VPC_NAME": "mwaa-vpc",
+                "SECURITY_GROUP_NAME": "mwaa-sg",
+                "S3_BUCKET_NAME": "mwaa-practice-bucket",
+                "MWAA_CLUSTER_NAME": "mwaa-practice-cluster",
+                "MWAA_VERSION": "2.6.3",
+                "MWAA_SIZE": "mw1.small",
+                "MWAA_ROLE_NAME": "mwaa-practice-role",
+                "S3_UPLOAD_ROLE": "s3-upload-delete-role",
+                "DAGS_FOLDER": "dags",
+                "REQUIREMENTS_FOLDER": "requirements",
+                "REQUIREMENTS_VERSION": false,
+                "STARTUP_SCRIPT_VERSION": false,
+                "REDSHIFT_DETAILS": {
+                    "TURN_ON_REDSHIFT_CLUSTER": false,
+                    "REDSHIFT_CLUSTER_NAME": "mwaa-practice-redshift-cluster",
+                    "REDSHIFT_DATABASE_NAME": "dev",
+                    "REDSHIFT_USERNAME": "admin",
+                    "REDSHIFT_PASSWORD": "Password1"
+                },
+                "ECS_DETAILS": {
+                    "TURN_ON_ECS_CLUSTER": false,
+                    "ECR_REPO_NAME": "mwaa-ecr-repo",
+                    "ECS_CLUSTER_NAME": "ecs-cluster-for-mwaa",
+                    "ECS_TASK_DEFINITION_NAME": "ecs-task-for-mwaa",
+                    "ECS_SERVICE_NAME": "ecs-service-for-mwaa",
+                    "ALLOW_MWAA_TO_TERMINATE_ECS_TASK": true
+                }
             },
-            "ECS_DETAILS": {
-                "TURN_ON_ECS_CLUSTER": true,
-                "ECR_REPO_NAME": "mwaa-ecr-repo",
-                "ECS_CLUSTER_NAME": "ecs-cluster-for-mwaa",
-                "ECS_TASK_DEFINITION_NAME": "ecs-task-for-mwaa",
-                "ECS_SERVICE_NAME": "ecs-service-for-mwaa",
-                "ALLOW_MWAA_TO_TERMINATE_ECS_TASK": true
+            "us-east-1": {
+                "CLOUDFORMATION_BUCKET": "cdk-hnb659fds-assets-638141915324-us-east-1"
+            },
+            "us-west-1": {
+                "CLOUDFORMATION_BUCKET": "cdk-hnb659fds-assets-638141915324-us-west-1"
             }
         }
     }
