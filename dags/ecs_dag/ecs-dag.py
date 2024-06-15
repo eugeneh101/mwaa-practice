@@ -36,10 +36,10 @@ task_ecs_operator = EcsRunTaskOperator(  # run Docker container via ECS operator
                     " && ".join(
                         [
                             "pip3 freeze ",
-                            "aws s3 cp s3://mwaa-practice-bucket/dags/ecs_dag/ecs_requirements.txt .",
+                            "aws s3 cp s3://mwaa-practice-bucket-${AWS_REGION}/dags/ecs_dag/ecs_requirements.txt .",  # container automatically knows region
                             "pip3 install -r ecs_requirements.txt",
                             "pip3 freeze",
-                            "aws s3 cp s3://mwaa-practice-bucket/dags/ecs_dag/silly_app.py .",
+                            "aws s3 cp s3://mwaa-practice-bucket-${AWS_REGION}/dags/ecs_dag/silly_app.py .",  # container automatically knows region
                             "black silly_app.py",
                             "python3 silly_app.py",
                         ]
@@ -56,9 +56,9 @@ task_ecs_operator = EcsRunTaskOperator(  # run Docker container via ECS operator
     },
     network_configuration={
         "awsvpcConfiguration": {
-            "securityGroups": ["sg-0e1592cc0e621101e"],  ### hard coded
+            "securityGroups": ["sg-07b171f318d5b9382"],  ### hard coded
             # "subnets": ["subnet-0d6942191f4f3ca9d"],  ### hard coded public subnet
-            "subnets": ["subnet-0c3d884ee49dcacb2"],  ### hard coded private subnet
+            "subnets": ["subnet-076a4385ed5176eba"],  ### hard coded private subnet
         },
     },
     awslogs_group="airflow-mwaa-practice-cluster-Task",  ### hard coded
