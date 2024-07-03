@@ -247,13 +247,17 @@ class MwaaPracticeStack(Stack):
             principals.extend(
                 [
                     iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
-                    # iam.ServicePrincipal("lambda.amazonaws.com"),  # for ECR deployment
+                    iam.ServicePrincipal("lambda.amazonaws.com"),  # for ECR deployment
                 ]
             )
-            managed_policies.append(
-                iam.ManagedPolicy.from_aws_managed_policy_name(
-                    "service-role/AmazonECSTaskExecutionRolePolicy"
-                ),  ### later principle of least privileges
+            managed_policies.extend([
+                    iam.ManagedPolicy.from_aws_managed_policy_name(
+                        "service-role/AmazonECSTaskExecutionRolePolicy"
+                    ),  ### later principle of least privileges
+                    iam.ManagedPolicy.from_aws_managed_policy_name(
+                        "service-role/AWSLambdaBasicExecutionRole"
+                    ),  ### for creating logs, but delete later
+                ]
             )
             mwaa_policy_document.add_statements(
                 iam.PolicyStatement(
@@ -429,36 +433,44 @@ class MwaaPracticeStack(Stack):
                 # auto_delete_images=True,  # just for testing
                 empty_on_delete=True,  # just for testing
             )
-            # self.mwaa_role.add_to_policy(
-            #     statement=iam.PolicyStatement(
-            #         actions=[
-            #             "ecr:GetAuthorizationToken",
-            #         ],
-            #         effect=iam.Effect.ALLOW,
-            #         resources="*",
-            #     )
-            # )
-            # self.mwaa_role.add_to_policy(
-            #     statement=iam.PolicyStatement(
-            #         actions=[
-            #             "ecr:BatchCheckLayerAvailability",
-            #             "ecr:GetDownloadUrlForLayer",
-            #             "ecr:GetRepositoryPolicy",
-            #             "ecr:DescribeRepositories",
-            #             "ecr:ListImages",
-            #             "ecr:DescribeImages",
-            #             "ecr:BatchGetImage",
-            #             "ecr:ListTagsForResource",
-            #             "ecr:DescribeImageScanFindings",
-            #             "ecr:InitiateLayerUpload",
-            #             "ecr:UploadLayerPart",
-            #             "ecr:CompleteLayerUpload",
-            #             "ecr:PutImage",
-            #         ],
-            #         effect=iam.Effect.ALLOW,
-            #         resources=[self.ecr_repo.repository_arn],
-            #     )
-            # )
+            self.mwaa_role.add_to_policy(  # for ECRDeployment
+                statement=iam.PolicyStatement(
+                    actions=[
+                        "ecr:GetAuthorizationToken",
+                    ],
+                    effect=iam.Effect.ALLOW,
+                    resources=["*"],
+                )
+            )
+            self.mwaa_role.add_to_policy(  # for ECRDeployment
+                statement=iam.PolicyStatement(
+                    actions=[
+                        "ecr:BatchCheckLayerAvailability",
+                        "ecr:GetDownloadUrlForLayer",
+                        "ecr:GetRepositoryPolicy",
+                        "ecr:DescribeRepositories",
+                        "ecr:ListImages",
+                        "ecr:DescribeImages",
+                        "ecr:BatchGetImage",
+                        "ecr:ListTagsForResource",
+                        "ecr:DescribeImageScanFindings",
+                        "ecr:InitiateLayerUpload",
+                        "ecr:UploadLayerPart",
+                        "ecr:CompleteLayerUpload",
+                        "ecr:PutImage",
+                    ],
+                    effect=iam.Effect.ALLOW,
+                    resources=["*"],
+                    # resources=[self.ecr_repo.repository_arn],
+                )
+            )
+            self.mwaa_role.add_to_policy(  # for ECRDeployment, might not need
+                statement=iam.PolicyStatement(
+                    actions=["s3:GetObject"],
+                    effect=iam.Effect.ALLOW,
+                    resources=["*"],
+                )
+            )
             task_asset = ecr_assets.DockerImageAsset(
                 self, "EcrImage", directory="service"  # hard coded
             )  # uploads to `container-assets` ECR repo
@@ -468,7 +480,7 @@ class MwaaPracticeStack(Stack):
                 src=ecr_deploy.DockerImageName(task_asset.image_uri),
                 dest=ecr_deploy.DockerImageName(self.ecr_repo.repository_uri),
                 # role=self.mwaa_role,
-                # role=self.mwaa_role.without_policy_updates(),
+                role=self.mwaa_role.without_policy_updates(),  # is this equivalent to mutable=False?
             )
             task_image = ecs.ContainerImage.from_ecr_repository(
                 repository=self.ecr_repo
@@ -514,6 +526,7 @@ class MwaaPracticeStack(Stack):
             # container.add_port_mappings(ecs.PortMapping(container_port=80))
 
             # make sure repo created before task definition
+            task_definition.node.add_dependency(self.ecr_repo)
             task_definition.node.add_dependency(deploy_repo)
 
         # connect AWS resources together
