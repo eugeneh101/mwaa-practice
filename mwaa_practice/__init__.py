@@ -250,13 +250,14 @@ class MwaaPracticeStack(Stack):
                     iam.ServicePrincipal("lambda.amazonaws.com"),  # for ECR deployment
                 ]
             )
-            managed_policies.extend([
-                    iam.ManagedPolicy.from_aws_managed_policy_name(
-                        "service-role/AmazonECSTaskExecutionRolePolicy"
-                    ),  ### later principle of least privileges
-                    iam.ManagedPolicy.from_aws_managed_policy_name(
-                        "service-role/AWSLambdaBasicExecutionRole"
-                    ),  ### for creating logs, but delete later
+            managed_policies.extend(
+                [
+                    # iam.ManagedPolicy.from_aws_managed_policy_name(
+                    #     "service-role/AmazonECSTaskExecutionRolePolicy"
+                    # ),  ### later principle of least privileges
+                    # iam.ManagedPolicy.from_aws_managed_policy_name(
+                    #     "service-role/AWSLambdaBasicExecutionRole"
+                    # ),  ### for creating logs, but delete later
                 ]
             )
             mwaa_policy_document.add_statements(
@@ -460,15 +461,21 @@ class MwaaPracticeStack(Stack):
                         "ecr:PutImage",
                     ],
                     effect=iam.Effect.ALLOW,
-                    resources=["*"],
-                    # resources=[self.ecr_repo.repository_arn],
+                    # resources=["*"],
+                    resources=[self.ecr_repo.repository_arn],
                 )
             )
-            self.mwaa_role.add_to_policy(  # for ECRDeployment, might not need
-                statement=iam.PolicyStatement(
-                    actions=["s3:GetObject"],
+            self.mwaa_role.add_to_policy(  # for ECRDeployment
+                statement=iam.PolicyStatement(  # the needed permissions
+                    actions=[  # from AmazonECSTaskExecutionRolePolicy
+                        # "ecr:BatchCheckLayerAvailability",
+                        "ecr:GetDownloadUrlForLayer",
+                        "ecr:BatchGetImage",
+                    ],
                     effect=iam.Effect.ALLOW,
-                    resources=["*"],
+                    resources=[
+                        f"arn:aws:ecr:{environment['AWS_REGION']}:{self.account}:repository/*"
+                    ],
                 )
             )
             task_asset = ecr_assets.DockerImageAsset(
