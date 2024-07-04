@@ -474,7 +474,7 @@ class MwaaPracticeStack(Stack):
                     ],
                     effect=iam.Effect.ALLOW,
                     resources=[
-                        f"arn:aws:ecr:{environment['AWS_REGION']}:{self.account}:repository/*"
+                        f"arn:aws:ecr:{environment['AWS_REGION']}:{self.account}:repository/cdk-*"
                     ],
                 )
             )
