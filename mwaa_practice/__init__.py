@@ -70,6 +70,7 @@ class MwaaPracticeStack(Stack):
         self, scope: Construct, construct_id: str, environment: dict, **kwargs
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
+        ### deal with subnet stuff during stack setup
         self.all_availability_zones = environment[  ### appears needed for Vpc()
             "ALL_AVAILABILITY_ZONES"
         ]
@@ -250,41 +251,6 @@ class MwaaPracticeStack(Stack):
                     iam.ServicePrincipal("lambda.amazonaws.com"),  # for ECR deployment
                 ]
             )
-            mwaa_policy_document.add_statements(
-                iam.PolicyStatement(
-                    actions=["ecs:RunTask"],
-                    resources=[
-                        f"arn:aws:ecs:{environment['AWS_REGION']}:{self.account}:task-definition/*",  # hard coded, cut down on permissions later
-                    ],
-                ),
-                iam.PolicyStatement(
-                    actions=["iam:PassRole"],
-                    resources=[
-                        f"arn:aws:iam::{self.account}:role/{environment['MWAA_ROLE_NAME']}",
-                    ],
-                ),
-                iam.PolicyStatement(
-                    actions=["ecs:DescribeTasks"],
-                    resources=[
-                        (
-                            f"arn:aws:ecs:{environment['AWS_REGION']}:{self.account}:task/"
-                            f"{environment['ECS_DETAILS']['ECS_CLUSTER_NAME']}/*"
-                        ),
-                    ],
-                ),
-            )
-            if environment["ECS_DETAILS"]["ALLOW_MWAA_TO_TERMINATE_ECS_TASK"]:
-                mwaa_policy_document.add_statements(
-                    iam.PolicyStatement(
-                        actions=["ecs:StopTask"],
-                        resources=[
-                            (
-                                f"arn:aws:ecs:{environment['AWS_REGION']}:{self.account}:task/"
-                                f"{environment['ECS_DETAILS']['ECS_CLUSTER_NAME']}/*"
-                            ),
-                        ],
-                    ),
-                )
         self.mwaa_role = iam.Role(
             self,
             "MwaaRole",  # hard coded
@@ -402,7 +368,46 @@ class MwaaPracticeStack(Stack):
             )
 
         if environment["ECS_DETAILS"]["TURN_ON_ECS_CLUSTER"]:
-            ## deal with subnet stuff during stack setup
+            self.mwaa_role.add_to_policy(
+                statement=iam.PolicyStatement(
+                    actions=["iam:PassRole"],
+                    resources=[
+                        f"arn:aws:iam::{self.account}:role/{environment['MWAA_ROLE_NAME']}",
+                    ],
+                ),
+            )
+            self.mwaa_role.add_to_policy(
+                statement=iam.PolicyStatement(
+                    actions=["ecs:RunTask"],
+                    resources=[
+                        f"arn:aws:ecs:{environment['AWS_REGION']}:{self.account}:task-definition/"
+                        f"{environment['ECS_DETAILS']['ECS_TASK_DEFINITION_NAME']}:*",
+                    ],
+                )
+            )
+            self.mwaa_role.add_to_policy(
+                statement=iam.PolicyStatement(
+                    actions=["ecs:DescribeTasks"],
+                    resources=[
+                        (
+                            f"arn:aws:ecs:{environment['AWS_REGION']}:{self.account}:task/"
+                            f"{environment['ECS_DETAILS']['ECS_CLUSTER_NAME']}/*"
+                        ),
+                    ],
+                ),
+            )
+            if environment["ECS_DETAILS"]["ALLOW_MWAA_TO_TERMINATE_ECS_TASK"]:
+                self.mwaa_role.add_to_policy(
+                    statement=iam.PolicyStatement(
+                        actions=["ecs:StopTask"],
+                        resources=[
+                            (
+                                f"arn:aws:ecs:{environment['AWS_REGION']}:{self.account}:task/"
+                                f"{environment['ECS_DETAILS']['ECS_CLUSTER_NAME']}/*"
+                            ),
+                        ],
+                    ),
+                )
             self.ecs_cluster = ecs.Cluster(
                 self,
                 "EcsCluster",
@@ -440,7 +445,10 @@ class MwaaPracticeStack(Stack):
                     ],
                     effect=iam.Effect.ALLOW,
                     resources=[
-                        environment["CLOUDFORMATION_ECR_REPO"]
+                        environment["ECS_DETAILS"]["CLOUDFORMATION_ECR_REPO"].format(
+                            AWS_REGION=environment["AWS_REGION"],
+                            AWS_ACCOUNT=self.account,
+                        )
                     ],
                 )
             )

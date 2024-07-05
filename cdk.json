@@ -10,6 +10,7 @@
                 "MWAA_VERSION": "2.6.3",
                 "MWAA_SIZE": "mw1.small",
                 "MWAA_ROLE_NAME": "mwaa-practice-role-{AWS_REGION}",
+                "CLOUDFORMATION_BUCKET": "cdk-hnb659fds-assets-{AWS_ACCOUNT}-{AWS_REGION}",
                 "S3_UPLOAD_ROLE": "s3-upload-delete-role-{AWS_REGION}",
                 "DAGS_FOLDER": "dags",
                 "REQUIREMENTS_FOLDER": "requirements",
@@ -24,6 +25,7 @@
                 },
                 "ECS_DETAILS": {
                     "TURN_ON_ECS_CLUSTER": false,
+                    "CLOUDFORMATION_ECR_REPO": "arn:aws:ecr:{AWS_REGION}:{AWS_ACCOUNT}:repository/cdk-hnb659fds-container-assets-{AWS_ACCOUNT}-{AWS_REGION}",
                     "ECR_REPO_NAME": "mwaa-ecr-repo",
                     "ECS_CLUSTER_NAME": "ecs-cluster-for-mwaa",
                     "ECS_TASK_DEFINITION_NAME": "ecs-task-for-mwaa",
@@ -31,14 +33,8 @@
                     "ALLOW_MWAA_TO_TERMINATE_ECS_TASK": true
                 }
             },
-            "us-east-1": {
-                "CLOUDFORMATION_BUCKET": "cdk-hnb659fds-assets-*-us-east-1",
-                "CLOUDFORMATION_ECR_REPO": "arn:aws:ecr:us-east-1:*:repository/cdk-hnb659fds-container-assets-*-us-east-1"
-            },
-            "us-west-1": {
-                "CLOUDFORMATION_BUCKET": "cdk-hnb659fds-assets-*-us-west-1",
-                "CLOUDFORMATION_ECR_REPO": "arn:aws:ecr:us-west-1:*:repository/cdk-hnb659fds-container-assets-*-us-west-1"
-            }
+            "us-east-1": {},
+            "us-west-1": {}
         }
     }
 }
