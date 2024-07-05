@@ -32,10 +32,12 @@
                 }
             },
             "us-east-1": {
-                "CLOUDFORMATION_BUCKET": "cdk-hnb659fds-assets-638141915324-us-east-1"
+                "CLOUDFORMATION_BUCKET": "cdk-hnb659fds-assets-*-us-east-1",
+                "CLOUDFORMATION_ECR_REPO": "arn:aws:ecr:us-east-1:*:repository/cdk-hnb659fds-container-assets-*-us-east-1"
             },
             "us-west-1": {
-                "CLOUDFORMATION_BUCKET": "cdk-hnb659fds-assets-638141915324-us-west-1"
+                "CLOUDFORMATION_BUCKET": "cdk-hnb659fds-assets-*-us-west-1",
+                "CLOUDFORMATION_ECR_REPO": "arn:aws:ecr:us-west-1:*:repository/cdk-hnb659fds-container-assets-*-us-west-1"
             }
         }
     }

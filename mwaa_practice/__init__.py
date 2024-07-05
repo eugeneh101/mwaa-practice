@@ -250,16 +250,6 @@ class MwaaPracticeStack(Stack):
                     iam.ServicePrincipal("lambda.amazonaws.com"),  # for ECR deployment
                 ]
             )
-            managed_policies.extend(
-                [
-                    # iam.ManagedPolicy.from_aws_managed_policy_name(
-                    #     "service-role/AmazonECSTaskExecutionRolePolicy"
-                    # ),  ### later principle of least privileges
-                    # iam.ManagedPolicy.from_aws_managed_policy_name(
-                    #     "service-role/AWSLambdaBasicExecutionRole"
-                    # ),  ### for creating logs, but delete later
-                ]
-            )
             mwaa_policy_document.add_statements(
                 iam.PolicyStatement(
                     actions=["ecs:RunTask"],
@@ -419,7 +409,6 @@ class MwaaPracticeStack(Stack):
                 cluster_name=environment["ECS_DETAILS"]["ECS_CLUSTER_NAME"],
                 vpc=self.vpc,
             )
-            ### figure out how to expire old images
             self.ecr_repo = ecr.Repository(
                 self,
                 "EcrRepo",
@@ -435,12 +424,24 @@ class MwaaPracticeStack(Stack):
                 empty_on_delete=True,  # just for testing
             )
             self.mwaa_role.add_to_policy(  # for ECRDeployment
-                statement=iam.PolicyStatement(
-                    actions=[
+                statement=iam.PolicyStatement(  # the needed permissions
+                    actions=[  # from AmazonECSTaskExecutionRolePolicy
                         "ecr:GetAuthorizationToken",
                     ],
                     effect=iam.Effect.ALLOW,
                     resources=["*"],
+                )
+            )
+            self.mwaa_role.add_to_policy(  # for ECRDeployment
+                statement=iam.PolicyStatement(  # the needed permissions
+                    actions=[  # from AmazonECSTaskExecutionRolePolicy
+                        "ecr:GetDownloadUrlForLayer",
+                        "ecr:BatchGetImage",
+                    ],
+                    effect=iam.Effect.ALLOW,
+                    resources=[
+                        environment["CLOUDFORMATION_ECR_REPO"]
+                    ],
                 )
             )
             self.mwaa_role.add_to_policy(  # for ECRDeployment
@@ -461,21 +462,7 @@ class MwaaPracticeStack(Stack):
                         "ecr:PutImage",
                     ],
                     effect=iam.Effect.ALLOW,
-                    # resources=["*"],
                     resources=[self.ecr_repo.repository_arn],
-                )
-            )
-            self.mwaa_role.add_to_policy(  # for ECRDeployment
-                statement=iam.PolicyStatement(  # the needed permissions
-                    actions=[  # from AmazonECSTaskExecutionRolePolicy
-                        # "ecr:BatchCheckLayerAvailability",
-                        "ecr:GetDownloadUrlForLayer",
-                        "ecr:BatchGetImage",
-                    ],
-                    effect=iam.Effect.ALLOW,
-                    resources=[
-                        f"arn:aws:ecr:{environment['AWS_REGION']}:{self.account}:repository/cdk-*"
-                    ],
                 )
             )
             task_asset = ecr_assets.DockerImageAsset(
@@ -486,7 +473,6 @@ class MwaaPracticeStack(Stack):
                 "PushTaskImage",
                 src=ecr_deploy.DockerImageName(task_asset.image_uri),
                 dest=ecr_deploy.DockerImageName(self.ecr_repo.repository_uri),
-                # role=self.mwaa_role,
                 role=self.mwaa_role.without_policy_updates(),  # is this equivalent to mutable=False?
             )
             task_image = ecs.ContainerImage.from_ecr_repository(
