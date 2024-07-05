@@ -517,8 +517,8 @@ class MwaaPracticeStack(Stack):
                 memory_mib="512",  # 0.5 GB RAM
                 # ephemeral_storage_gib=None,
                 # volumes=None,
-                execution_role=self.mwaa_role,
-                task_role=self.mwaa_role,
+                execution_role=self.mwaa_role.without_policy_updates(),  # is this equivalent to mutable=False?
+                task_role=self.mwaa_role.without_policy_updates(),  # is this equivalent to mutable=False?
             )
             container = task_definition.add_container(
                 environment["ECS_DETAILS"]["ECS_TASK_DEFINITION_NAME"],
