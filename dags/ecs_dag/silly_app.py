@@ -7,7 +7,6 @@ import numpy as np  # test requirements.txt was installed
 # AWS_REGION = os.environ["AWS_REGION"]
 
 
-
 if __name__ == "__main__":
     print("env vars", os.environ)
     for i in range(60):
