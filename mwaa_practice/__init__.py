@@ -366,6 +366,7 @@ class MwaaPracticeStack(Stack):
             )
 
         if environment["ECS_DETAILS"]["TURN_ON_ECS_CLUSTER"]:
+            # followed instructions from https://medium.com/@sohflp/how-to-work-with-airflow-docker-operator-in-amazon-mwaa-5c6b7ad36976
             self.mwaa_role.add_to_policy(
                 statement=iam.PolicyStatement(
                     actions=["iam:PassRole"],
