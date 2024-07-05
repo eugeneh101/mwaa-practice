@@ -243,7 +243,6 @@ class MwaaPracticeStack(Stack):
             iam.ServicePrincipal("airflow.amazonaws.com"),
             iam.ServicePrincipal("airflow-env.amazonaws.com"),
         ]
-        managed_policies = []
         if environment["ECS_DETAILS"]["TURN_ON_ECS_CLUSTER"]:
             principals.extend(
                 [
@@ -257,7 +256,6 @@ class MwaaPracticeStack(Stack):
             role_name=environment["MWAA_ROLE_NAME"],
             assumed_by=iam.CompositePrincipal(*principals),
             inline_policies={"CDKmwaaPolicyDocument": mwaa_policy_document},
-            managed_policies=managed_policies,
             # path="/service-role/",
         )
         network_configuration = mwaa.CfnEnvironment.NetworkConfigurationProperty(
