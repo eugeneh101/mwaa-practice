@@ -125,14 +125,6 @@ class MwaaPracticeStack(Stack):
                     ],
                 ),
                 iam.PolicyStatement(
-                    actions=["s3:ListAllMyBuckets"],
-                    effect=iam.Effect.DENY,
-                    resources=[
-                        self.dags_bucket.bucket_arn,
-                        self.dags_bucket.bucket_arn + "/*",
-                    ],
-                ),
-                iam.PolicyStatement(
                     actions=[
                         "s3:GetObject*",
                         "s3:GetBucket*",
@@ -216,27 +208,6 @@ class MwaaPracticeStack(Stack):
                     effect=iam.Effect.ALLOW,
                     resources=["*"],
                 ),
-                # iam.PolicyStatement(
-                #     actions=[
-                #         "ecs:RunTask",
-                #         "ecs:DescribeTasks",
-                #         "ecs:RegisterTaskDefinition",
-                #         "ecs:DescribeTaskDefinition",
-                #         "ecs:ListTasks"
-                #     ],
-                #     effect=iam.Effect.ALLOW,
-                #     resources=[
-                #         "*"
-                #         ],
-                #     ),
-                # iam.PolicyStatement(
-                #     actions=[
-                #         "iam:PassRole"
-                #     ],
-                #     effect=iam.Effect.ALLOW,
-                #     resources=[ "*" ],
-                #     conditions= { "StringLike": { "iam:PassedToService": "ecs-tasks.amazonaws.com" } },
-                #     ),
             ]
         )
         principals = [
