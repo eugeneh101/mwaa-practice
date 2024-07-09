@@ -226,7 +226,7 @@ class MwaaPracticeStack(Stack):
             "MwaaRole",  # hard coded
             role_name=environment["MWAA_ROLE_NAME"],
             assumed_by=iam.CompositePrincipal(*principals),
-            inline_policies={"CDKmwaaPolicyDocument": mwaa_policy_document},
+            inline_policies={"MwaaPolicyDocument": mwaa_policy_document},
             # path="/service-role/",
         )
         network_configuration = mwaa.CfnEnvironment.NetworkConfigurationProperty(
@@ -443,6 +443,21 @@ class MwaaPracticeStack(Stack):
                     resources=[self.ecr_repo.repository_arn],
                 )
             )
+            self.mwaa_role.add_to_policy(  # for ECRDeployment
+                statement=iam.PolicyStatement(
+                    actions=[
+                        "logs:CreateLogGroup",
+                        "logs:CreateLogStream",
+                        "logs:PutLogEvents",
+                    ],
+                    effect=iam.Effect.ALLOW,
+                    resources=[
+                        f"arn:aws:logs:{environment['AWS_REGION']}:"
+                        f"{self.account}:log-group:/aws/lambda/"
+                        "MwaaPracticeStack-CustomCDKECRDeployment*"  # hard coded
+                    ],
+                )
+            )
             task_asset = ecr_assets.DockerImageAsset(
                 self, "EcrImage", directory="service"  # hard coded
             )  # uploads to `container-assets` ECR repo
@@ -468,7 +483,7 @@ class MwaaPracticeStack(Stack):
                 "MwaaTaskLogGroup",
                 log_group_name=f"airflow-{environment['MWAA_CLUSTER_NAME']}-Task",
             )
-            task_definition = ecs.TaskDefinition(
+            self.task_definition = ecs.TaskDefinition(
                 self,
                 "TaskDefinition",
                 family=environment["ECS_DETAILS"]["ECS_TASK_DEFINITION_NAME"],
@@ -484,7 +499,7 @@ class MwaaPracticeStack(Stack):
                 execution_role=self.mwaa_role.without_policy_updates(),  # is this equivalent to mutable=False?
                 task_role=self.mwaa_role.without_policy_updates(),  # is this equivalent to mutable=False?
             )
-            container = task_definition.add_container(
+            container = self.task_definition.add_container(
                 environment["ECS_DETAILS"]["ECS_TASK_DEFINITION_NAME"],
                 image=task_image,
                 logging=ecs.LogDrivers.aws_logs(
@@ -497,8 +512,8 @@ class MwaaPracticeStack(Stack):
             # container.add_port_mappings(ecs.PortMapping(container_port=80))
 
             # make sure repo created before task definition
-            task_definition.node.add_dependency(self.ecr_repo)
-            task_definition.node.add_dependency(deploy_repo)
+            self.task_definition.node.add_dependency(self.ecr_repo)
+            self.task_definition.node.add_dependency(deploy_repo)
 
         # connect AWS resources together
         lambda_policy_document = iam.PolicyDocument(
