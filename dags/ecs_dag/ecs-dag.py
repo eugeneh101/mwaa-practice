@@ -56,9 +56,10 @@ task_ecs_operator = EcsRunTaskOperator(  # run Docker container via ECS operator
     },
     network_configuration={
         "awsvpcConfiguration": {
-            "securityGroups": ["sg-07b171f318d5b9382"],  ### hard coded
-            # "subnets": ["subnet-0d6942191f4f3ca9d"],  ### hard coded public subnet
-            "subnets": ["subnet-076a4385ed5176eba"],  ### hard coded private subnet
+            "securityGroups": ["sg-0a7bc396cc1153c3e"],  ### hard coded
+            # "securityGroups": ["sg-0bc29853f6ff12b14"],  ### hard coded
+            "subnets": ["subnet-03824147cfd170f5f"],  ### hard coded private subnet
+            # "subnets": ["subnet-0081c561fb5d0d7c0"],  ### hard coded private subnet
         },
     },
     awslogs_group="airflow-mwaa-practice-cluster-Task",  ### hard coded

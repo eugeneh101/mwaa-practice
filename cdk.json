@@ -24,7 +24,7 @@
                     "REDSHIFT_PASSWORD": "Password1"
                 },
                 "ECS_DETAILS": {
-                    "TURN_ON_ECS_CLUSTER": false,
+                    "TURN_ON_ECS_CLUSTER": true,
                     "CLOUDFORMATION_ECR_REPO": "arn:aws:ecr:{AWS_REGION}:{AWS_ACCOUNT}:repository/cdk-hnb659fds-container-assets-{AWS_ACCOUNT}-{AWS_REGION}",
                     "ECR_REPO_NAME": "mwaa-ecr-repo",
                     "ECS_CLUSTER_NAME": "ecs-cluster-for-mwaa",

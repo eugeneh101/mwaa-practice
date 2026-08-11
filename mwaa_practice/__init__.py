@@ -61,6 +61,194 @@ class RedshiftService(Construct):
         )
 
 
+class EcsandEcr(Construct):
+    def __init__(
+        self,
+        scope: Construct,
+        construct_id: str,
+        environment: dict,
+        mwaa_role: iam.Role,
+        vpc: ec2.Vpc,
+    ) -> None:
+        super().__init__(scope, construct_id)  # required
+        # followed instructions from https://medium.com/@sohflp/how-to-work-with-airflow-docker-operator-in-amazon-mwaa-5c6b7ad36976
+        mwaa_role.add_to_policy(
+            statement=iam.PolicyStatement(
+                actions=["iam:PassRole"],
+                resources=[
+                    f"arn:aws:iam::{scope.account}:role/{environment['MWAA_ROLE_NAME']}",
+                ],
+            ),
+        )
+        mwaa_role.add_to_policy(
+            statement=iam.PolicyStatement(
+                actions=["ecs:RunTask"],
+                resources=[
+                    f"arn:aws:ecs:{environment['AWS_REGION']}:{scope.account}:task-definition/"
+                    f"{environment['ECS_DETAILS']['ECS_TASK_DEFINITION_NAME']}:*",
+                ],
+            )
+        )
+        mwaa_role.add_to_policy(
+            statement=iam.PolicyStatement(
+                actions=["ecs:DescribeTasks"],
+                resources=[
+                    (
+                        f"arn:aws:ecs:{environment['AWS_REGION']}:{scope.account}:task/"
+                        f"{environment['ECS_DETAILS']['ECS_CLUSTER_NAME']}/*"
+                    ),
+                ],
+            ),
+        )
+        if environment["ECS_DETAILS"]["ALLOW_MWAA_TO_TERMINATE_ECS_TASK"]:
+            mwaa_role.add_to_policy(
+                statement=iam.PolicyStatement(
+                    actions=["ecs:StopTask"],
+                    resources=[
+                        (
+                            f"arn:aws:ecs:{environment['AWS_REGION']}:{scope.account}:task/"
+                            f"{environment['ECS_DETAILS']['ECS_CLUSTER_NAME']}/*"
+                        ),
+                    ],
+                ),
+            )
+        self.ecs_cluster = ecs.Cluster(
+            self,
+            "EcsCluster",
+            cluster_name=environment["ECS_DETAILS"]["ECS_CLUSTER_NAME"],
+            vpc=vpc,
+        )
+        self.ecr_repo = ecr.Repository(
+            self,
+            "EcrRepo",
+            repository_name=environment["ECS_DETAILS"]["ECR_REPO_NAME"],
+            lifecycle_rules=[
+                ecr.LifecycleRule(
+                    max_image_count=1,  # hard coded
+                    description="Delete old images that are not the latest",
+                )
+            ],
+            removal_policy=RemovalPolicy.DESTROY,
+            empty_on_delete=True,
+            # auto_delete_images=True,
+        )
+        mwaa_role.add_to_policy(  # for ECRDeployment
+            statement=iam.PolicyStatement(  # the needed permissions
+                actions=[  # from AmazonECSTaskExecutionRolePolicy
+                    "ecr:GetAuthorizationToken",
+                ],
+                effect=iam.Effect.ALLOW,
+                resources=["*"],
+            )
+        )
+        mwaa_role.add_to_policy(  # for ECRDeployment
+            statement=iam.PolicyStatement(  # the needed permissions
+                actions=[  # from AmazonECSTaskExecutionRolePolicy
+                    "ecr:GetDownloadUrlForLayer",
+                    "ecr:BatchGetImage",
+                ],
+                effect=iam.Effect.ALLOW,
+                resources=[
+                    environment["ECS_DETAILS"]["CLOUDFORMATION_ECR_REPO"].format(
+                        AWS_REGION=environment["AWS_REGION"],
+                        AWS_ACCOUNT=scope.account,
+                    )
+                ],
+            )
+        )
+        mwaa_role.add_to_policy(  # for ECRDeployment
+            statement=iam.PolicyStatement(
+                actions=[
+                    "ecr:BatchCheckLayerAvailability",
+                    "ecr:GetDownloadUrlForLayer",
+                    "ecr:GetRepositoryPolicy",
+                    "ecr:DescribeRepositories",
+                    "ecr:ListImages",
+                    "ecr:DescribeImages",
+                    "ecr:BatchGetImage",
+                    "ecr:ListTagsForResource",
+                    "ecr:DescribeImageScanFindings",
+                    "ecr:InitiateLayerUpload",
+                    "ecr:UploadLayerPart",
+                    "ecr:CompleteLayerUpload",
+                    "ecr:PutImage",
+                ],
+                effect=iam.Effect.ALLOW,
+                resources=[self.ecr_repo.repository_arn],
+            )
+        )
+        mwaa_role.add_to_policy(  # for ECRDeployment
+            statement=iam.PolicyStatement(
+                actions=[
+                    "logs:CreateLogGroup",
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents",
+                ],
+                effect=iam.Effect.ALLOW,
+                resources=[
+                    f"arn:aws:logs:{environment['AWS_REGION']}:"
+                    f"{scope.account}:log-group:/aws/lambda/"
+                    "{scope.stack_name}-CustomCDKECRDeployment*"
+                    # scope.stack_name resolves to "MwaaPracticeStack"
+                ],
+            )
+        )
+        task_asset = ecr_assets.DockerImageAsset(
+            self, "EcrImage", directory="service"  # hard coded
+        )  # uploads to `container-assets` ECR repo
+        deploy_repo = ecr_deploy.ECRDeployment(  # upload to desired ECR repo
+            self,
+            "PushTaskImage",
+            src=ecr_deploy.DockerImageName(task_asset.image_uri),
+            dest=ecr_deploy.DockerImageName(self.ecr_repo.repository_uri),
+            role=mwaa_role.without_policy_updates(),  # is this equivalent to mutable=False?
+        )
+        task_image = ecs.ContainerImage.from_ecr_repository(repository=self.ecr_repo)
+        # mwaa_task_log_group = logs.LogGroup(
+        #     self,
+        #     "MwaaTaskLogGroup",
+        #     log_group_name=f"airflow-{environment['MWAA_CLUSTER_NAME']}-Task",
+        #     retention=logs.RetentionDays.ONE_MONTH,
+        #     removal_policy=RemovalPolicy.DESTROY,
+        # )
+        mwaa_task_log_group = logs.LogGroup.from_log_group_name(
+            self,
+            "MwaaTaskLogGroup",
+            log_group_name=f"airflow-{environment['MWAA_CLUSTER_NAME']}-Task",
+        )
+        self.task_definition = ecs.TaskDefinition(
+            self,
+            "TaskDefinition",
+            family=environment["ECS_DETAILS"]["ECS_TASK_DEFINITION_NAME"],
+            compatibility=ecs.Compatibility.FARGATE,
+            runtime_platform=ecs.RuntimePlatform(
+                operating_system_family=ecs.OperatingSystemFamily.LINUX,
+                cpu_architecture=ecs.CpuArchitecture.X86_64,
+            ),
+            cpu="256",  # 0.25 CPU
+            memory_mib="512",  # 0.5 GB RAM
+            # ephemeral_storage_gib=None,
+            # volumes=None,
+            execution_role=mwaa_role.without_policy_updates(),  # is this equivalent to mutable=False?
+            task_role=mwaa_role.without_policy_updates(),  # is this equivalent to mutable=False?
+        )
+        container = self.task_definition.add_container(
+            environment["ECS_DETAILS"]["ECS_TASK_DEFINITION_NAME"],
+            image=task_image,
+            logging=ecs.LogDrivers.aws_logs(
+                stream_prefix="ecs",
+                log_group=mwaa_task_log_group,
+                mode=ecs.AwsLogDriverMode.NON_BLOCKING,
+            ),
+            environment={},
+        )
+        # container.add_port_mappings(ecs.PortMapping(container_port=80))
+
+        # make sure repo created before task definition
+        self.task_definition.node.add_dependency(self.ecr_repo)
+        self.task_definition.node.add_dependency(deploy_repo)
+
+
 class MwaaPracticeStack(Stack):
     @property  ### appears needed for Vpc()
     def availability_zones(self):
@@ -337,183 +525,13 @@ class MwaaPracticeStack(Stack):
             )
 
         if environment["ECS_DETAILS"]["TURN_ON_ECS_CLUSTER"]:
-            # followed instructions from https://medium.com/@sohflp/how-to-work-with-airflow-docker-operator-in-amazon-mwaa-5c6b7ad36976
-            self.mwaa_role.add_to_policy(
-                statement=iam.PolicyStatement(
-                    actions=["iam:PassRole"],
-                    resources=[
-                        f"arn:aws:iam::{self.account}:role/{environment['MWAA_ROLE_NAME']}",
-                    ],
-                ),
-            )
-            self.mwaa_role.add_to_policy(
-                statement=iam.PolicyStatement(
-                    actions=["ecs:RunTask"],
-                    resources=[
-                        f"arn:aws:ecs:{environment['AWS_REGION']}:{self.account}:task-definition/"
-                        f"{environment['ECS_DETAILS']['ECS_TASK_DEFINITION_NAME']}:*",
-                    ],
-                )
-            )
-            self.mwaa_role.add_to_policy(
-                statement=iam.PolicyStatement(
-                    actions=["ecs:DescribeTasks"],
-                    resources=[
-                        (
-                            f"arn:aws:ecs:{environment['AWS_REGION']}:{self.account}:task/"
-                            f"{environment['ECS_DETAILS']['ECS_CLUSTER_NAME']}/*"
-                        ),
-                    ],
-                ),
-            )
-            if environment["ECS_DETAILS"]["ALLOW_MWAA_TO_TERMINATE_ECS_TASK"]:
-                self.mwaa_role.add_to_policy(
-                    statement=iam.PolicyStatement(
-                        actions=["ecs:StopTask"],
-                        resources=[
-                            (
-                                f"arn:aws:ecs:{environment['AWS_REGION']}:{self.account}:task/"
-                                f"{environment['ECS_DETAILS']['ECS_CLUSTER_NAME']}/*"
-                            ),
-                        ],
-                    ),
-                )
-            self.ecs_cluster = ecs.Cluster(
+            self.ecs_and_ecr = EcsandEcr(
                 self,
-                "EcsCluster",
-                cluster_name=environment["ECS_DETAILS"]["ECS_CLUSTER_NAME"],
+                "EcsandEcr",
+                environment=environment,
+                mwaa_role=self.mwaa_role,
                 vpc=self.vpc,
             )
-            self.ecr_repo = ecr.Repository(
-                self,
-                "EcrRepo",
-                repository_name=environment["ECS_DETAILS"]["ECR_REPO_NAME"],
-                lifecycle_rules=[
-                    ecr.LifecycleRule(
-                        max_image_count=1,  # hard coded
-                        description="Delete old images that are not the latest",
-                    )
-                ],
-                removal_policy=RemovalPolicy.DESTROY,
-                # auto_delete_images=True,  # just for testing
-                empty_on_delete=True,  # just for testing
-            )
-            self.mwaa_role.add_to_policy(  # for ECRDeployment
-                statement=iam.PolicyStatement(  # the needed permissions
-                    actions=[  # from AmazonECSTaskExecutionRolePolicy
-                        "ecr:GetAuthorizationToken",
-                    ],
-                    effect=iam.Effect.ALLOW,
-                    resources=["*"],
-                )
-            )
-            self.mwaa_role.add_to_policy(  # for ECRDeployment
-                statement=iam.PolicyStatement(  # the needed permissions
-                    actions=[  # from AmazonECSTaskExecutionRolePolicy
-                        "ecr:GetDownloadUrlForLayer",
-                        "ecr:BatchGetImage",
-                    ],
-                    effect=iam.Effect.ALLOW,
-                    resources=[
-                        environment["ECS_DETAILS"]["CLOUDFORMATION_ECR_REPO"].format(
-                            AWS_REGION=environment["AWS_REGION"],
-                            AWS_ACCOUNT=self.account,
-                        )
-                    ],
-                )
-            )
-            self.mwaa_role.add_to_policy(  # for ECRDeployment
-                statement=iam.PolicyStatement(
-                    actions=[
-                        "ecr:BatchCheckLayerAvailability",
-                        "ecr:GetDownloadUrlForLayer",
-                        "ecr:GetRepositoryPolicy",
-                        "ecr:DescribeRepositories",
-                        "ecr:ListImages",
-                        "ecr:DescribeImages",
-                        "ecr:BatchGetImage",
-                        "ecr:ListTagsForResource",
-                        "ecr:DescribeImageScanFindings",
-                        "ecr:InitiateLayerUpload",
-                        "ecr:UploadLayerPart",
-                        "ecr:CompleteLayerUpload",
-                        "ecr:PutImage",
-                    ],
-                    effect=iam.Effect.ALLOW,
-                    resources=[self.ecr_repo.repository_arn],
-                )
-            )
-            self.mwaa_role.add_to_policy(  # for ECRDeployment
-                statement=iam.PolicyStatement(
-                    actions=[
-                        "logs:CreateLogGroup",
-                        "logs:CreateLogStream",
-                        "logs:PutLogEvents",
-                    ],
-                    effect=iam.Effect.ALLOW,
-                    resources=[
-                        f"arn:aws:logs:{environment['AWS_REGION']}:"
-                        f"{self.account}:log-group:/aws/lambda/"
-                        "MwaaPracticeStack-CustomCDKECRDeployment*"  # hard coded
-                    ],
-                )
-            )
-            task_asset = ecr_assets.DockerImageAsset(
-                self, "EcrImage", directory="service"  # hard coded
-            )  # uploads to `container-assets` ECR repo
-            deploy_repo = ecr_deploy.ECRDeployment(  # upload to desired ECR repo
-                self,
-                "PushTaskImage",
-                src=ecr_deploy.DockerImageName(task_asset.image_uri),
-                dest=ecr_deploy.DockerImageName(self.ecr_repo.repository_uri),
-                role=self.mwaa_role.without_policy_updates(),  # is this equivalent to mutable=False?
-            )
-            task_image = ecs.ContainerImage.from_ecr_repository(
-                repository=self.ecr_repo
-            )
-            # mwaa_task_log_group = logs.LogGroup(
-            #     self,
-            #     "MwaaTaskLogGroup",
-            #     log_group_name=f"airflow-{environment['MWAA_CLUSTER_NAME']}-Task",
-            #     retention=logs.RetentionDays.ONE_MONTH,
-            #     removal_policy=RemovalPolicy.DESTROY,
-            # )
-            mwaa_task_log_group = logs.LogGroup.from_log_group_name(
-                self,
-                "MwaaTaskLogGroup",
-                log_group_name=f"airflow-{environment['MWAA_CLUSTER_NAME']}-Task",
-            )
-            self.task_definition = ecs.TaskDefinition(
-                self,
-                "TaskDefinition",
-                family=environment["ECS_DETAILS"]["ECS_TASK_DEFINITION_NAME"],
-                compatibility=ecs.Compatibility.FARGATE,
-                runtime_platform=ecs.RuntimePlatform(
-                    operating_system_family=ecs.OperatingSystemFamily.LINUX,
-                    cpu_architecture=ecs.CpuArchitecture.X86_64,
-                ),
-                cpu="256",  # 0.25 CPU
-                memory_mib="512",  # 0.5 GB RAM
-                # ephemeral_storage_gib=None,
-                # volumes=None,
-                execution_role=self.mwaa_role.without_policy_updates(),  # is this equivalent to mutable=False?
-                task_role=self.mwaa_role.without_policy_updates(),  # is this equivalent to mutable=False?
-            )
-            container = self.task_definition.add_container(
-                environment["ECS_DETAILS"]["ECS_TASK_DEFINITION_NAME"],
-                image=task_image,
-                logging=ecs.LogDrivers.aws_logs(
-                    stream_prefix="ecs",
-                    log_group=mwaa_task_log_group,
-                    mode=ecs.AwsLogDriverMode.NON_BLOCKING,
-                ),
-                environment={},
-            )
-            # container.add_port_mappings(ecs.PortMapping(container_port=80))
-
-            # make sure repo created before task definition
-            self.task_definition.node.add_dependency(self.ecr_repo)
-            self.task_definition.node.add_dependency(deploy_repo)
 
         # connect AWS resources together
         lambda_policy_document = iam.PolicyDocument(
